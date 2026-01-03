@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+.svelte-kit/
+build/
+dist/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Shopify
+.shopify/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated types (regenerate with pnpm run graphql-codegen)
+# Uncomment if you prefer to not commit generated types:
+# src/lib/types/admin.generated.d.ts
+# src/lib/types/admin.types.d.ts
+# src/lib/types/*.schema.json
+
+# OS files
+Thumbs.db
+ehthumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Lock files (keep one, ignore others if using pnpm)
+package-lock.json
+yarn.lock
+
+# Reference files (not part of the template)
+reference/

@@ -1,0 +1,11 @@
+# Web configuration for Shopify CLI
+# This file configures how the app runs during `shopify app dev`
+
+name = "SvelteKit"
+roles = ["frontend", "backend"]
+webhooks_path = "/webhooks/app/uninstalled"
+
+[commands]
+# Run database migrations before starting dev server
+predev = "pnpm run db:push"
+dev = "pnpm run dev"
