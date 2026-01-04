@@ -82,8 +82,45 @@ pnpm run config:link
 This will:
 
 - Create or connect to an app in your Partner Dashboard
-- Update `shopify.app.toml` with your app's client ID
+- Create a `shopify.app.toml` file with your app's config
 - Set up OAuth redirect URLs
+
+After linking, update your `shopify.app.toml` with the recommended configuration (for dev):
+
+```toml
+[build]
+automatically_update_urls_on_dev = true
+include_config_on_deploy = true
+
+[webhooks]
+api_version = "2025-10"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+[access_scopes]
+scopes = "write_products"
+
+[auth]
+redirect_urls = [ "https://your-app.com/auth/callback" ]
+```
+
+See `example-shopify.app.toml` for a complete reference.
+
+> **Note:** In production, set `automatically_update_urls_on_dev = false` to prevent the CLI from overwriting your production URLs during development.
+
+Pull Shopify credentials to your `.env` file:
+
+```bash
+shopify app env pull
+```
+
+This populates `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, and other app credentials automatically.
 
 ### 5. Start Development
 
@@ -114,7 +151,6 @@ Visit the URL shown in the terminal to install the app on a development store.
 │   │   └── webhooks/         # Webhook handlers
 │   ├── app.d.ts              # Global type definitions
 │   └── hooks.server.ts       # Authentication middleware
-├── shopify.app.toml          # Shopify app configuration
 ├── shopify.web.toml          # Dev server configuration
 ├── drizzle.config.ts         # Database configuration
 └── compose.yaml              # Docker PostgreSQL setup
