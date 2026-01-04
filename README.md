@@ -241,6 +241,63 @@ pnpm run db:studio
 
 3. Reinstall the app on your development store
 
+## Claude Code Integration
+
+This template includes a `/shopify` skill for [Claude Code](https://claude.ai/claude-code) that provides on-demand access to Shopify documentation, GraphQL schema introspection, and code validation.
+
+### Setting Up the Shopify MCP Server
+
+To enable the `/shopify` skill, add the Shopify Dev MCP server using the Claude CLI:
+
+```bash
+claude mcp add shopify-dev-mcp -- npx -y @shopify/dev-mcp@latest
+```
+
+This configures the MCP server for your project. Restart Claude Code for changes to take effect.
+
+### Using the /shopify Skill
+
+The `/shopify` command spawns an isolated subagent with access to Shopify's MCP tools:
+
+```bash
+# Search Shopify documentation
+/shopify How do I create a product with GraphQL?
+
+# Introspect the GraphQL schema
+/shopify What fields are available on the Product type?
+
+# Validate GraphQL queries
+/shopify Validate this mutation: mutation { productCreate(input: {...}) { ... } }
+
+# Get help with Polaris components
+/shopify How do I use the Card component in App Bridge?
+
+# Validate Liquid theme code
+/shopify Check this Liquid snippet for errors: {{ product.title | upcase }}
+```
+
+### Available MCP Tools
+
+The skill provides access to these Shopify Dev MCP tools:
+
+| Tool | Description |
+|------|-------------|
+| `learn_shopify_api` | Initialize API context (Admin, Storefront, Functions, etc.) |
+| `search_docs_chunks` | Search Shopify documentation |
+| `introspect_graphql_schema` | Explore GraphQL types, queries, and mutations |
+| `fetch_full_docs` | Retrieve complete documentation pages |
+| `validate_graphql_codeblocks` | Validate GraphQL code against the schema |
+| `validate_component_codeblocks` | Validate Polaris/UI component usage |
+| `validate_theme` | Validate Liquid theme files |
+
+### Why Use a Skill?
+
+The MCP server loads 7 tools with detailed descriptions that consume tokens in every session. By using a skill:
+
+- **Token savings**: MCP only loads when you invoke `/shopify`
+- **Isolated context**: Research doesn't pollute your main conversation
+- **Faster responses**: Less context to process on non-Shopify tasks
+
 ## Authentication Flow
 
 The app uses Shopify's OAuth with session tokens:
