@@ -53,6 +53,18 @@ Analyze Svelte code for issues. Use when writing Svelte components.
 ### playground-link
 Generate Svelte Playground links (only when requested by user).
 
+## Shopify Questions
+
+Always use the `/shopify` skill for ANY question about:
+- Shopify APIs (Admin, Storefront, Partner, etc.)
+- GraphQL queries/mutations for Shopify
+- Polaris components
+- Liquid themes
+- Shopify Functions
+- Shopify app development patterns
+
+Invoke the skill immediately as the first action - do not use Shopify MCP tools directly without going through the skill.
+
 ## GraphQL Pattern
 
 Use the `#graphql` tag for type generation:
