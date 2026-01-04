@@ -93,7 +93,7 @@ automatically_update_urls_on_dev = true
 include_config_on_deploy = true
 
 [webhooks]
-api_version = "2025-10"
+api_version = "2026-04"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
@@ -114,7 +114,7 @@ See `example-shopify.app.toml` for a complete reference.
 
 > **Note:** In production, set `automatically_update_urls_on_dev = false` to prevent the CLI from overwriting your production URLs during development.
 
-Pull Shopify credentials to your `.env` file:
+Pull Shopify credentials to your `.env` file - you may need to make sure you have at least some scopes defined:
 
 ```bash
 shopify app env pull
@@ -193,7 +193,7 @@ Write GraphQL queries with the `#graphql` tag for automatic type generation:
 
 ```typescript
 const response = await admin.graphql(
-  `#graphql
+	`#graphql
     query GetShop {
       shop {
         name
@@ -276,15 +276,15 @@ How do I use the Card component in Polaris?
 
 The subagent has access to these Shopify Dev MCP tools:
 
-| Tool | Description |
-|------|-------------|
-| `learn_shopify_api` | Initialize API context (Admin, Storefront, Functions, etc.) |
-| `search_docs_chunks` | Search Shopify documentation |
-| `introspect_graphql_schema` | Explore GraphQL types, queries, and mutations |
-| `fetch_full_docs` | Retrieve complete documentation pages |
-| `validate_graphql_codeblocks` | Validate GraphQL code against the schema |
-| `validate_component_codeblocks` | Validate Polaris/UI component usage |
-| `validate_theme` | Validate Liquid theme files |
+| Tool                            | Description                                                 |
+| ------------------------------- | ----------------------------------------------------------- |
+| `learn_shopify_api`             | Initialize API context (Admin, Storefront, Functions, etc.) |
+| `search_docs_chunks`            | Search Shopify documentation                                |
+| `introspect_graphql_schema`     | Explore GraphQL types, queries, and mutations               |
+| `fetch_full_docs`               | Retrieve complete documentation pages                       |
+| `validate_graphql_codeblocks`   | Validate GraphQL code against the schema                    |
+| `validate_component_codeblocks` | Validate Polaris/UI component usage                         |
+| `validate_theme`                | Validate Liquid theme files                                 |
 
 ### Why Use a Skill with Subagents?
 
