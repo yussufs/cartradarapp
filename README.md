@@ -243,42 +243,38 @@ pnpm run db:studio
 
 ## Claude Code Integration
 
-This template includes a `/shopify` skill for [Claude Code](https://claude.ai/claude-code) that provides on-demand access to Shopify documentation, GraphQL schema introspection, and code validation.
+This template includes a Shopify skill for [Claude Code](https://claude.ai/claude-code) that automatically spawns a research subagent when you ask about Shopify APIs, keeping your main conversation clean.
 
 ### Setting Up the Shopify MCP Server
 
-To enable the `/shopify` skill, add the Shopify Dev MCP server using the Claude CLI:
+Add the Shopify Dev MCP server using the Claude CLI:
 
 ```bash
 claude mcp add shopify-dev-mcp -- npx -y @shopify/dev-mcp@latest
 ```
 
-This configures the MCP server for your project. Restart Claude Code for changes to take effect.
+Restart Claude Code for changes to take effect.
 
-### Using the /shopify Skill
+### How the Skill Works
 
-The `/shopify` command spawns an isolated subagent with access to Shopify's MCP tools:
+When you ask Claude about Shopify development topics, the skill automatically:
 
-```bash
-# Search Shopify documentation
-/shopify How do I create a product with GraphQL?
+1. Detects Shopify-related questions (APIs, GraphQL, Polaris, Liquid, etc.)
+2. Spawns a research subagent with access to Shopify's MCP tools
+3. Returns concise, actionable answers without polluting your main conversation
 
-# Introspect the GraphQL schema
-/shopify What fields are available on the Product type?
+**Example questions that trigger the skill:**
 
-# Validate GraphQL queries
-/shopify Validate this mutation: mutation { productCreate(input: {...}) { ... } }
-
-# Get help with Polaris components
-/shopify How do I use the Card component in App Bridge?
-
-# Validate Liquid theme code
-/shopify Check this Liquid snippet for errors: {{ product.title | upcase }}
+```
+How do I create a product with GraphQL?
+What fields are available on the Order type?
+Validate this mutation: mutation { productCreate(input: {...}) { ... } }
+How do I use the Card component in Polaris?
 ```
 
 ### Available MCP Tools
 
-The skill provides access to these Shopify Dev MCP tools:
+The subagent has access to these Shopify Dev MCP tools:
 
 | Tool | Description |
 |------|-------------|
@@ -290,13 +286,11 @@ The skill provides access to these Shopify Dev MCP tools:
 | `validate_component_codeblocks` | Validate Polaris/UI component usage |
 | `validate_theme` | Validate Liquid theme files |
 
-### Why Use a Skill?
+### Why Use a Skill with Subagents?
 
-The MCP server loads 7 tools with detailed descriptions that consume tokens in every session. By using a skill:
-
-- **Token savings**: MCP only loads when you invoke `/shopify`
-- **Isolated context**: Research doesn't pollute your main conversation
-- **Faster responses**: Less context to process on non-Shopify tasks
+- **Isolated context**: Research and exploration stays in the subagent, not your main conversation
+- **Cleaner responses**: Only relevant findings are returned, not the full exploration
+- **Automatic detection**: No need to remember a command - just ask your question
 
 ## Authentication Flow
 
