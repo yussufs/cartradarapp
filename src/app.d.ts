@@ -31,6 +31,10 @@ declare global {
 			toast: {
 				show: (message: string) => void;
 			};
+			idToken: () => Promise<string>;
+			intents?: {
+				invoke?: (intent: string, options: { value: string }) => void;
+			};
 		};
 	}
 }

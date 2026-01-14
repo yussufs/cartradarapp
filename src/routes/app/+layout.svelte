@@ -32,8 +32,11 @@
 </svelte:head>
 
 <s-app-nav>
-	<s-link href="/app">Home</s-link>
+	<s-link href="/app" rel="home">Home</s-link>
 	<s-link href="/app/products">Products</s-link>
+	<s-link href="/app/puzzles">Puzzles</s-link>
+	<s-link href="/app/settings">Settings</s-link>
+	<s-link href="/app/template-info">Template Info</s-link>
 </s-app-nav>
 
 {@render children()}
