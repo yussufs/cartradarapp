@@ -1,6 +1,8 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 
+/// <reference types="@shopify/app-bridge-types" />
+
 import type { Session } from '@shopify/shopify-api';
 import type { AdminClient } from '$lib/server/shopify/graphql';
 
@@ -24,18 +26,6 @@ declare global {
 
 		// interface PageState {}
 		// interface Platform {}
-	}
-
-	interface Window {
-		shopify?: {
-			toast: {
-				show: (message: string) => void;
-			};
-			idToken: () => Promise<string>;
-			intents?: {
-				invoke?: (intent: string, options: { value: string }) => void;
-			};
-		};
 	}
 }
 

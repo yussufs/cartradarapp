@@ -1,6 +1,6 @@
 import { Session } from '@shopify/shopify-api';
 import { db } from '$lib/server/db';
-import { session as sessionTable } from '$lib/server/db/schema';
+import { session as sessionTable } from '$lib/shared/db/schema';
 import { eq, inArray } from 'drizzle-orm';
 
 // SessionStorage interface based on Shopify's requirements
@@ -32,13 +32,10 @@ export class DrizzleSessionStorage implements SessionStorage {
 			emailVerified: session.onlineAccessInfo?.associated_user?.email_verified ?? false
 		};
 
-		await db
-			.insert(sessionTable)
-			.values(sessionData)
-			.onConflictDoUpdate({
-				target: sessionTable.id,
-				set: sessionData
-			});
+		await db.insert(sessionTable).values(sessionData).onConflictDoUpdate({
+			target: sessionTable.id,
+			set: sessionData
+		});
 
 		return true;
 	}

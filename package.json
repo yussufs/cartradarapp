@@ -15,6 +15,7 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
 		"lint": "prettier --check .",
+		"typecheck": "tsc --noEmit",
 		"graphql-codegen": "graphql-codegen",
 		"graphql-codegen:watch": "graphql-codegen --watch",
 		"db:push": "drizzle-kit push",
@@ -26,6 +27,7 @@
 	"devDependencies": {
 		"@graphql-codegen/cli": "^6.1.0",
 		"@shopify/api-codegen-preset": "^1.2.1",
+		"@shopify/app-bridge-types": "^0.5.3",
 		"@sveltejs/adapter-node": "^5.2.0",
 		"@sveltejs/kit": "^2.49.1",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
@@ -37,7 +39,8 @@
 		"svelte": "^5.45.6",
 		"svelte-check": "^4.3.4",
 		"typescript": "^5.9.3",
-		"vite": "^7.2.6"
+		"vite": "^7.2.6",
+		"vite-node": "^5.3.0"
 	},
 	"dependencies": {
 		"@shopify/admin-api-client": "^1.1.1",

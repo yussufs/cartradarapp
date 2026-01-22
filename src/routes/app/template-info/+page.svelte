@@ -12,7 +12,7 @@
 			await update();
 			isLoading = false;
 			if (form?.success && form?.product) {
-				window.shopify?.toast.show('Product created');
+				window.shopify.toast.show('Product created');
 			}
 		};
 	}
@@ -41,21 +41,21 @@
 		<Card title="App template specs">
 			<div class="specs-list">
 				<p>
-					<Text>Framework: </Text>
+					<Text>Framework:</Text>
 					<Link href="https://svelte.dev/" external>SvelteKit</Link>
 				</p>
 				<p>
-					<Text>Interface: </Text>
+					<Text>Interface:</Text>
 					<Link href="https://shopify.dev/docs/api/app-home" external>
 						Custom Components with App Bridge
 					</Link>
 				</p>
 				<p>
-					<Text>API: </Text>
+					<Text>API:</Text>
 					<Link href="https://shopify.dev/docs/api/admin-graphql" external>GraphQL</Link>
 				</p>
 				<p>
-					<Text>Database: </Text>
+					<Text>Database:</Text>
 					<Link href="https://orm.drizzle.team/" external>Drizzle ORM</Link>
 				</p>
 			</div>

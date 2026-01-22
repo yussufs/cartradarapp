@@ -4,7 +4,6 @@ import { shopify, getOfflineSessionId } from '$lib/server/shopify';
 import { createAdmin } from '$lib/server/shopify/graphql';
 
 export const GET: RequestHandler = async ({ request, url }) => {
-	// Authenticate using session token from Authorization header
 	const authHeader = request.headers.get('authorization');
 
 	if (!authHeader?.startsWith('Bearer ')) {
@@ -12,8 +11,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
 	}
 
 	const token = authHeader.substring(7);
-
-	// Get search query from URL params
 	const searchQuery = url.searchParams.get('search') || '';
 
 	let session;
@@ -94,7 +91,10 @@ export const GET: RequestHandler = async ({ request, url }) => {
 			};
 		}
 
-		const responseData = response.data as { products?: { edges?: Array<{ node: ProductNode }> } };
+		const responseData = response.data as {
+			products?: { edges?: Array<{ node: ProductNode }> };
+		};
+
 		const products =
 			responseData.products?.edges?.map((edge) => ({
 				id: edge.node.id,

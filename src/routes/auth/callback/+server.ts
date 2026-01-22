@@ -1,5 +1,6 @@
 import type { RequestHandler } from './$types';
 import { redirect, error } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import { shopify, Session } from '$lib/server/shopify';
 
 export const GET: RequestHandler = async ({ url, cookies }) => {
@@ -61,11 +62,8 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 
 		await shopify.sessionStorage.storeSession(session);
 
-		// Use the SHOPIFY_APP_URL env var directly for redirect
-		const { env } = await import('$env/dynamic/private');
-		const appUrl = env.SHOPIFY_APP_URL || env.HOST || `https://${config.hostName}`;
-
 		// Redirect to app page with shop and host params
+		const appUrl = env.SHOPIFY_APP_URL || env.HOST || `https://${config.hostName}`;
 		const redirectUrl = new URL('/app', appUrl);
 		redirectUrl.searchParams.set('shop', shop);
 		if (host) {
