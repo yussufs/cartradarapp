@@ -20,7 +20,7 @@ Trigger this skill when the user asks about:
 
 ## How to Execute
 
-1. **Spawn a research subagent** using the Task tool with `subagent_type: "general-purpose"`
+1. **Spawn a research subagent** using the Task tool with `subagent_type: "general-purpose"` and `model: "sonnet"` — always use Sonnet for this research work, never a larger model
 2. In the subagent prompt, instruct it to:
    - Call `mcp__shopify-dev-mcp__learn_shopify_api` first with the appropriate API type
    - Use `mcp__shopify-dev-mcp__search_docs_chunks` to search documentation
@@ -56,5 +56,6 @@ Steps:
 ## Important
 
 - Always spawn a subagent - do NOT call MCP tools directly in the main conversation
+- Always pass `model: "sonnet"` to the Task tool - documentation research does not need a larger model
 - This keeps research context isolated from the main conversation
 - Return only the relevant findings, not the full exploration

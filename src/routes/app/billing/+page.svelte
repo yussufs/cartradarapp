@@ -1,55 +1,26 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Page, Card, Button, Banner, Badge, Skeleton } from '$lib/components';
+	import { Page, Card, Button, Banner, Badge, DataTable, Skeleton } from '$lib/components';
 
-	interface PlanInfo {
-		plan: 'free' | 'pro' | 'scale';
-		monthlyPriceUsd: number;
-		alertLimit: number | null;
-		includedSms: number;
-		smsPricing: { domestic: number; international: number } | null;
-		defaultCappedAmountUsd: number;
+	interface RecentFee {
+		id: string;
+		orderId: string | null;
+		recoveredAmount: string | null;
+		amount: string;
+		billed: boolean;
+		createdAt: string;
 	}
 
 	let isLoading = $state(true);
 	let loadError = $state('');
 	let actionError = $state('');
-	let changingTo = $state<string | null>(null);
-	let current = $state<{ plan: string; alertsUsed: number; smsUsed: number }>({
-		plan: 'free',
-		alertsUsed: 0,
-		smsUsed: 0
-	});
-	let plans = $state<PlanInfo[]>([]);
+	let working = $state(false);
 
-	const planCopy: Record<string, { name: string; tagline: string; features: string[] }> = {
-		free: {
-			name: 'Free',
-			tagline: 'Try it out',
-			features: ['10 alerts per 30 days', 'Email alerts', 'Slack alerts', '1 alert rule']
-		},
-		pro: {
-			name: 'Pro',
-			tagline: 'For stores that can’t miss a big cart',
-			features: [
-				'Unlimited email + Slack alerts',
-				'50 SMS alerts/mo included (US & Canada)',
-				'Then 5¢ US/Canada · 15¢ international per SMS',
-				'You set the monthly SMS spend cap',
-				'Recovery analytics'
-			]
-		},
-		scale: {
-			name: 'Scale',
-			tagline: 'For high-volume and B2B stores',
-			features: [
-				'Everything in Pro',
-				'300 SMS alerts/mo included (US & Canada)',
-				'Then 4¢ US/Canada · 12¢ international per SMS',
-				'Multiple alert rules (coming soon)'
-			]
-		}
-	};
+	let billingActive = $state(false);
+	let pricing = $state({ feePercent: 1, minFeeUsd: 1, cappedAmountUsd: 500 });
+	let usage = $state({ recoveries: 0, feesUsd: '0', recoveredRevenue: '0' });
+	let recent = $state<RecentFee[]>([]);
+	let currency = $state('USD');
 
 	async function authFetch(path: string, init?: RequestInit): Promise<Response> {
 		const token = await window.shopify.idToken();
@@ -64,8 +35,11 @@
 			const response = await authFetch('/api/billing');
 			if (!response.ok) throw new Error(`Failed to load billing (${response.status})`);
 			const data = await response.json();
-			current = data.current;
-			plans = data.plans;
+			billingActive = data.billingActive;
+			pricing = data.pricing;
+			usage = data.usage;
+			recent = data.recent;
+			currency = data.currency;
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load billing';
 		} finally {
@@ -75,37 +49,72 @@
 
 	onMount(load);
 
-	async function changePlan(plan: string) {
-		changingTo = plan;
+	async function activate() {
+		working = true;
 		actionError = '';
 		try {
 			const response = await authFetch('/api/billing', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ plan })
+				body: JSON.stringify({ action: 'activate' })
 			});
 			const data = await response.json();
 			if (!response.ok) {
-				actionError = data.error ?? 'Plan change failed. Please try again.';
+				actionError = data.error ?? 'Could not start activation. Please try again.';
 				return;
 			}
-			if (data.confirmationUrl) {
-				// Merchant approves the charge on Shopify's confirmation page
-				window.open(data.confirmationUrl, '_top');
-				return;
-			}
-			// Downgrade to free — no confirmation needed
-			window.shopify?.toast?.show('Subscription cancelled');
-			await load();
+			// Merchant approves the usage subscription on Shopify's confirmation page
+			window.open(data.confirmationUrl, '_top');
 		} catch {
-			actionError = 'Plan change failed. Please try again.';
+			actionError = 'Could not start activation. Please try again.';
 		} finally {
-			changingTo = null;
+			working = false;
 		}
 	}
 
-	function priceLabel(plan: PlanInfo): string {
-		return plan.monthlyPriceUsd === 0 ? 'Free' : `$${plan.monthlyPriceUsd}/month`;
+	async function cancel() {
+		working = true;
+		actionError = '';
+		try {
+			const response = await authFetch('/api/billing', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'cancel' })
+			});
+			if (!response.ok) {
+				const data = await response.json();
+				actionError = data.error ?? 'Could not cancel. Please try again.';
+				return;
+			}
+			window.shopify?.toast?.show('Billing cancelled');
+			await load();
+		} catch {
+			actionError = 'Could not cancel. Please try again.';
+		} finally {
+			working = false;
+		}
+	}
+
+	function money(amount: string | number, c = currency): string {
+		const value = typeof amount === 'string' ? parseFloat(amount) : amount;
+		try {
+			return new Intl.NumberFormat('en-US', { style: 'currency', currency: c }).format(value);
+		} catch {
+			return `${c} ${value.toFixed(2)}`;
+		}
+	}
+
+	function usd(amount: string | number): string {
+		const value = typeof amount === 'string' ? parseFloat(amount) : amount;
+		return `$${value.toFixed(2)}`;
+	}
+
+	function when(iso: string): string {
+		return new Date(iso).toLocaleDateString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
 	}
 </script>
 
@@ -115,13 +124,13 @@
 
 <Page
 	title="Plan & billing"
-	subtitle="One recovered high-value cart usually pays for years of Cart Radar."
+	subtitle="Cart Radar only earns when it recovers a sale for you — no monthly fee."
 >
 	{#if isLoading}
 		<Card>
 			<div class="skeleton-stack">
 				<Skeleton variant="text" width="30%" />
-				<Skeleton variant="box" height="180px" />
+				<Skeleton variant="box" height="160px" />
 			</div>
 		</Card>
 	{:else if loadError}
@@ -136,56 +145,98 @@
 				</Banner>
 			{/if}
 
-			<Card title="Current usage">
+			<Card title="How pricing works">
+				{#snippet actions()}
+					{#if billingActive}
+						<Badge tone="success">Active</Badge>
+					{:else}
+						<Badge tone="caution">Not active</Badge>
+					{/if}
+				{/snippet}
+				<div class="pricing-body">
+					<p class="headline">
+						{pricing.feePercent}% of every cart we recover
+						<span class="headline-sub">· {usd(pricing.minFeeUsd)} minimum per recovery</span>
+					</p>
+					<ul class="pricing-points">
+						<li>
+							No monthly fee — you pay only when a high-value cart is recovered after an alert.
+						</li>
+						<li>Unlimited email, Slack, and SMS alerts.</li>
+						<li>
+							Only <strong>exact</strong> recoveries (the order came from the cart we alerted on) are
+							billed.
+						</li>
+						<li>
+							Capped at {usd(pricing.cappedAmountUsd)}/month by default — you approve any change.
+						</li>
+					</ul>
+					{#if billingActive}
+						<Button loading={working} onclick={cancel}>Cancel billing</Button>
+					{:else}
+						<Button variant="primary" loading={working} onclick={activate}>Activate billing</Button>
+					{/if}
+				</div>
+			</Card>
+
+			{#if !billingActive}
+				<Banner tone="info">
+					<p>
+						Billing isn't active yet, so we can't bill recoveries. Activating is free — you're only
+						charged when Cart Radar actually recovers a cart.
+					</p>
+				</Banner>
+			{/if}
+
+			<Card title="Last 30 days">
 				<div class="usage-row">
 					<div>
-						<p class="usage-label">Alerts this period</p>
-						<p class="usage-value">{current.alertsUsed}</p>
+						<p class="usage-label">Carts recovered</p>
+						<p class="usage-value">{usage.recoveries}</p>
 					</div>
 					<div>
-						<p class="usage-label">SMS this period</p>
-						<p class="usage-value">{current.smsUsed}</p>
+						<p class="usage-label">Revenue recovered</p>
+						<p class="usage-value">{money(usage.recoveredRevenue)}</p>
+					</div>
+					<div>
+						<p class="usage-label">Fees</p>
+						<p class="usage-value">{usd(usage.feesUsd)}</p>
 					</div>
 				</div>
 			</Card>
 
-			<div class="plan-grid">
-				{#each plans as plan (plan.plan)}
-					<Card title={planCopy[plan.plan].name}>
-						{#snippet actions()}
-							{#if current.plan === plan.plan}
-								<Badge tone="success">Current plan</Badge>
-							{/if}
-						{/snippet}
-						<div class="plan-body">
-							<p class="plan-price">{priceLabel(plan)}</p>
-							<p class="plan-tagline">{planCopy[plan.plan].tagline}</p>
-							<ul class="plan-features">
-								{#each planCopy[plan.plan].features as feature (feature)}
-									<li>{feature}</li>
-								{/each}
-							</ul>
-							{#if current.plan !== plan.plan}
-								<Button
-									variant={plan.plan === 'free' ? 'secondary' : 'primary'}
-									loading={changingTo === plan.plan}
-									onclick={() => changePlan(plan.plan)}
-								>
-									{plan.plan === 'free'
-										? 'Downgrade to Free'
-										: `Switch to ${planCopy[plan.plan].name}`}
-								</Button>
-							{/if}
-						</div>
-					</Card>
-				{/each}
-			</div>
-
-			<p class="fine-print">
-				Paid plans bill through your Shopify invoice. SMS beyond the included volume is charged as
-				Shopify usage charges, capped at ${plans.find((p) => p.plan === current.plan)
-					?.defaultCappedAmountUsd ?? 25}/month by default — you approve any cap change.
-			</p>
+			{#if recent.length > 0}
+				<Card title="Recent recovery fees" padding="none">
+					<DataTable>
+						<thead>
+							<tr>
+								<th>Date</th>
+								<th>Order</th>
+								<th>Recovered</th>
+								<th>Fee</th>
+								<th>Status</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each recent as fee (fee.id)}
+								<tr>
+									<td>{when(fee.createdAt)}</td>
+									<td>{fee.orderId ?? '—'}</td>
+									<td>{fee.recoveredAmount ? money(fee.recoveredAmount) : '—'}</td>
+									<td>{usd(fee.amount)}</td>
+									<td>
+										{#if fee.billed}
+											<Badge tone="success">Billed</Badge>
+										{:else}
+											<Badge tone="caution">Pending</Badge>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</DataTable>
+				</Card>
+			{/if}
 		</div>
 	{/if}
 </Page>
@@ -198,9 +249,38 @@
 		gap: 16px;
 	}
 
+	.pricing-body {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		align-items: flex-start;
+	}
+
+	.headline {
+		margin: 0;
+		font-size: 22px;
+		font-weight: 650;
+	}
+
+	.headline-sub {
+		font-size: 15px;
+		font-weight: 400;
+		color: var(--p-color-text-secondary, #6d7175);
+	}
+
+	.pricing-points {
+		margin: 0;
+		padding-left: 18px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		font-size: 14px;
+	}
+
 	.usage-row {
 		display: flex;
 		gap: 48px;
+		flex-wrap: wrap;
 	}
 
 	.usage-label {
@@ -213,46 +293,5 @@
 		margin: 0;
 		font-size: 24px;
 		font-weight: 650;
-	}
-
-	.plan-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: 16px;
-		align-items: start;
-	}
-
-	.plan-body {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		align-items: flex-start;
-	}
-
-	.plan-price {
-		margin: 0;
-		font-size: 22px;
-		font-weight: 650;
-	}
-
-	.plan-tagline {
-		margin: 0;
-		color: var(--p-color-text-secondary, #6d7175);
-		font-size: 13px;
-	}
-
-	.plan-features {
-		margin: 0 0 8px;
-		padding-left: 18px;
-		font-size: 14px;
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-
-	.fine-print {
-		margin: 0;
-		font-size: 13px;
-		color: var(--p-color-text-secondary, #6d7175);
 	}
 </style>

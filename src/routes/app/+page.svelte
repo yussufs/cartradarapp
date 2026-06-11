@@ -36,12 +36,7 @@
 		alertsSent: 0
 	});
 	let recent = $state<RecentCheckout[]>([]);
-	let setup = $state({ ruleConfigured: false, channelConfigured: false });
-	let plan = $state<{ plan: string; alertsUsed: number; alertLimit: number | null }>({
-		plan: 'free',
-		alertsUsed: 0,
-		alertLimit: 10
-	});
+	let setup = $state({ ruleConfigured: false, channelConfigured: false, billingActive: false });
 
 	onMount(async () => {
 		try {
@@ -55,7 +50,6 @@
 			kpis = data.kpis;
 			recent = data.recent;
 			setup = data.setup;
-			plan = data.plan;
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load dashboard';
 		} finally {
@@ -64,7 +58,6 @@
 	});
 
 	const needsSetup = $derived(!setup.ruleConfigured || !setup.channelConfigured);
-	const quotaExhausted = $derived(plan.alertLimit !== null && plan.alertsUsed >= plan.alertLimit);
 
 	function money(amount: string | number, currency = 'USD'): string {
 		const value = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -128,11 +121,14 @@
 				</Banner>
 			{/if}
 
-			{#if quotaExhausted}
-				<Banner tone="warning" title="Free plan limit reached">
+			{#if !setup.billingActive}
+				<Banner tone="warning" title="Activate billing to start recovering carts">
+					{#snippet actions()}
+						<Button variant="primary" href="/app/billing">Activate</Button>
+					{/snippet}
 					<p>
-						You've used all {plan.alertLimit} free alerts this period — new high-value abandons are going
-						unalerted. Upgrade to keep alerts flowing.
+						Cart Radar is free until it recovers a cart — then it's 1% of that order ($1 min).
+						Activate billing so we can alert you and track recoveries.
 					</p>
 				</Banner>
 			{/if}

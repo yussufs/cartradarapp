@@ -5,7 +5,6 @@ import { authenticateRequest, AuthError } from '$lib/server/shopify/auth';
 import { db } from '$lib/server/db';
 import { alertRules, channelSettings, shops } from '$lib/shared/db/schema';
 import { ensureShopRow } from '$lib/server/checkouts';
-import { PLANS } from '$lib/server/billing/plans';
 
 interface SettingsBody {
 	rule: {
@@ -52,8 +51,6 @@ export const GET: RequestHandler = async ({ request }) => {
 		.where(eq(channelSettings.shop, shop))
 		.limit(1);
 
-	const plan = PLANS[shopRow.plan];
-
 	return json({
 		rule: rule
 			? {
@@ -72,15 +69,6 @@ export const GET: RequestHandler = async ({ request }) => {
 					smsEnabled: channels.smsEnabled
 				}
 			: { emailEnabled: true, slackEnabled: false, slackWebhookUrl: null, smsEnabled: false },
-		plan: {
-			plan: shopRow.plan,
-			alertsUsed: shopRow.alertsUsedThisPeriod,
-			alertLimit: plan.alertLimit,
-			smsUsed: shopRow.smsUsedThisPeriod,
-			includedSms: plan.includedSms,
-			smsAvailable: plan.smsPricing !== null,
-			smsPricing: plan.smsPricing
-		},
 		currency: shopRow.currency ?? 'USD'
 	});
 };

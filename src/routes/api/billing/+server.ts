@@ -1,12 +1,16 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { authenticateRequest, AuthError } from '$lib/server/shopify/auth';
 import { db } from '$lib/server/db';
-import { shops } from '$lib/shared/db/schema';
+import { shops, usageCharges } from '$lib/shared/db/schema';
 import { ensureShopRow } from '$lib/server/checkouts';
-import { PLANS } from '$lib/server/billing/plans';
-import { cancelSubscription, createSubscription } from '$lib/server/billing/subscriptions';
+import { BILLING } from '$lib/server/billing/plans';
+import {
+	activateBilling,
+	cancelSubscription,
+	syncBillingState
+} from '$lib/server/billing/subscriptions';
 
 async function authenticate(request: Request) {
 	try {
@@ -24,28 +28,66 @@ async function authenticate(request: Request) {
 	}
 }
 
+const PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+
 export const GET: RequestHandler = async ({ request }) => {
 	const { shop, response } = await authenticate(request);
 	if (!shop) return response!;
 
 	await ensureShopRow(shop);
-	const [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
+	let [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
+
+	// DB says inactive, but the activation webhook may have been missed (e.g.
+	// delivered to another environment) — reconcile against Shopify directly.
+	if (!shopRow.billingActive) {
+		try {
+			if (await syncBillingState(shop)) {
+				[shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
+			}
+		} catch (err) {
+			console.error(`Billing state sync failed for ${shop}:`, err);
+		}
+	}
+
+	const since = new Date(Date.now() - PERIOD_MS);
+	const [usage] = await db
+		.select({
+			feeCount: sql<number>`count(*)`,
+			feeTotal: sql<string>`coalesce(sum(${usageCharges.amount}), 0)`,
+			recoveredTotal: sql<string>`coalesce(sum(${usageCharges.recoveredAmount}), 0)`
+		})
+		.from(usageCharges)
+		.where(and(eq(usageCharges.shop, shop), gte(usageCharges.createdAt, since)));
+
+	const recent = await db
+		.select({
+			id: usageCharges.id,
+			orderId: usageCharges.orderId,
+			recoveredAmount: usageCharges.recoveredAmount,
+			amount: usageCharges.amount,
+			billed: sql<boolean>`${usageCharges.shopifyUsageRecordId} is not null`,
+			createdAt: usageCharges.createdAt
+		})
+		.from(usageCharges)
+		.where(eq(usageCharges.shop, shop))
+		.orderBy(desc(usageCharges.createdAt))
+		.limit(10);
 
 	return json({
-		current: {
-			plan: shopRow.plan,
-			alertsUsed: shopRow.alertsUsedThisPeriod,
-			smsUsed: shopRow.smsUsedThisPeriod,
-			periodStartedAt: shopRow.periodStartedAt
+		billingActive: shopRow.billingActive,
+		pricing: {
+			feePercent: BILLING.feeRate * 100,
+			minFeeUsd: BILLING.minFeeUsd,
+			cappedAmountUsd: BILLING.defaultCappedAmountUsd
 		},
-		plans: Object.values(PLANS).map((plan) => ({
-			plan: plan.plan,
-			monthlyPriceUsd: plan.monthlyPriceUsd,
-			alertLimit: plan.alertLimit,
-			includedSms: plan.includedSms,
-			smsPricing: plan.smsPricing,
-			defaultCappedAmountUsd: plan.defaultCappedAmountUsd
-		}))
+		periodDays: 30,
+		usage: {
+			recoveries: Number(usage.feeCount),
+			feesUsd: usage.feeTotal,
+			recoveredRevenue: usage.recoveredTotal
+		},
+		recent,
+		currency: shopRow.currency ?? 'USD'
 	});
 };
 
@@ -53,30 +95,33 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { shop, response } = await authenticate(request);
 	if (!shop) return response!;
 
-	let body: { plan?: string };
+	let body: { action?: string };
 	try {
 		body = await request.json();
 	} catch {
 		return json({ error: 'Invalid JSON body' }, { status: 400 });
 	}
 
-	const plan = body.plan;
-	if (plan !== 'free' && plan !== 'pro' && plan !== 'scale') {
-		return json({ error: 'Unknown plan' }, { status: 422 });
-	}
-
 	await ensureShopRow(shop);
 
 	try {
-		if (plan === 'free') {
-			// Downgrade: cancel the active subscription; the billing webhook flips the plan
+		if (body.action === 'activate') {
+			const confirmationUrl = await activateBilling(shop);
+			return json({ confirmationUrl });
+		}
+		if (body.action === 'cancel') {
 			await cancelSubscription(shop);
 			return json({ ok: true });
 		}
-		const confirmationUrl = await createSubscription(shop, plan);
-		return json({ confirmationUrl });
+		return json({ error: 'Unknown action' }, { status: 422 });
 	} catch (err) {
-		console.error(`Billing change failed for ${shop}:`, err);
-		return json({ error: 'Could not start the plan change. Please try again.' }, { status: 500 });
+		// Surface Shopify's actual GraphQL error body (otherwise logged as "[Object]")
+		const e = err as { response?: { body?: unknown }; body?: unknown };
+		const detail = e?.response?.body ?? e?.body;
+		console.error(
+			`Billing action failed for ${shop}:`,
+			detail ? JSON.stringify(detail, null, 2) : err
+		);
+		return json({ error: 'Could not complete that. Please try again.' }, { status: 500 });
 	}
 };

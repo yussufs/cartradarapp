@@ -7,5 +7,5 @@ webhooks_path = "/webhooks/app/uninstalled"
 
 [commands]
 # Run database migrations before starting dev server
-predev = "pnpm run db:push"
+predev = "pnpm run db:migrate"
 dev = "pnpm run dev"

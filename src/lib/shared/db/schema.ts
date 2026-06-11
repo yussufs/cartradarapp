@@ -59,8 +59,6 @@ export const session = pgTable('session', {
 	refreshTokenExpires: timestamp('refresh_token_expires', { mode: 'date' })
 });
 
-export type ShopPlan = 'free' | 'pro' | 'scale';
-
 export type CheckoutStatus =
 	| 'active' // checkout still being worked on (or below inactivity window)
 	| 'abandoned' // inactive past window + matched a rule, alert not yet sent
@@ -97,15 +95,10 @@ export const shops = pgTable('shops', {
 	// Days after an alert that a later order from the same customer still counts
 	// as an (inferred) recovery. Read live at order time — see markCheckoutOrdered.
 	attributionWindowDays: integer('attribution_window_days').default(14).notNull(),
-	plan: text('plan').$type<ShopPlan>().default('free').notNull(),
+	// Single usage-based subscription: billingActive once the merchant approves it.
+	billingActive: boolean('billing_active').default(false).notNull(),
 	billingSubscriptionId: text('billing_subscription_id'),
 	usageLineItemId: text('usage_line_item_id'),
-	// Alert/SMS counters for the current 30-day period (lazily reset by the dispatcher)
-	alertsUsedThisPeriod: integer('alerts_used_this_period').default(0).notNull(),
-	smsUsedThisPeriod: integer('sms_used_this_period').default(0).notNull(),
-	// Domestic SMS consumed against the plan's included allowance this period
-	domesticSmsUsedThisPeriod: integer('domestic_sms_used_this_period').default(0).notNull(),
-	periodStartedAt: timestamp('period_started_at', { mode: 'date' }).defaultNow().notNull(),
 	installedAt: timestamp('installed_at', { mode: 'date' }).defaultNow().notNull(),
 	uninstalledAt: timestamp('uninstalled_at', { mode: 'date' })
 });
@@ -229,18 +222,26 @@ export const alerts = pgTable(
 );
 
 /**
- * Audit trail for Shopify usage records (per-SMS charges beyond included volume).
+ * Recovery fees billed to Shopify. One row per recovered cart (the success fee
+ * = 1% of the order, $1 minimum). shopifyUsageRecordId is null when the fee was
+ * recorded but not yet pushed (billing not active, or usage cap reached).
  */
 export const usageCharges = pgTable(
 	'usage_charges',
 	{
 		id: uuid('id').defaultRandom().primaryKey(),
 		shop: text('shop').notNull(),
-		alertId: uuid('alert_id'),
+		checkoutId: uuid('checkout_id'),
+		orderId: text('order_id'),
+		recoveredAmount: numeric('recovered_amount', { precision: 12, scale: 2 }),
+		// The fee we charge (max(1% of order, $1))
 		amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
 		idempotencyKey: text('idempotency_key').notNull(),
 		shopifyUsageRecordId: text('shopify_usage_record_id'),
 		createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull()
 	},
-	(t) => [uniqueIndex('usage_charges_idempotency_idx').on(t.idempotencyKey)]
+	(t) => [
+		uniqueIndex('usage_charges_idempotency_idx').on(t.idempotencyKey),
+		index('usage_charges_shop_created_idx').on(t.shop, t.createdAt)
+	]
 );

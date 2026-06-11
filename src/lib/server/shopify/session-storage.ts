@@ -22,6 +22,8 @@ export class DrizzleSessionStorage implements SessionStorage {
 			scope: session.scope ?? null,
 			expires: session.expires ?? null,
 			accessToken: session.accessToken ?? '',
+			refreshToken: session.refreshToken ?? null,
+			refreshTokenExpires: session.refreshTokenExpires ?? null,
 			userId: session.onlineAccessInfo?.associated_user?.id?.toString() ?? null,
 			firstName: session.onlineAccessInfo?.associated_user?.first_name ?? null,
 			lastName: session.onlineAccessInfo?.associated_user?.last_name ?? null,
@@ -77,6 +79,8 @@ export class DrizzleSessionStorage implements SessionStorage {
 			scope: row.scope ?? undefined,
 			expires: row.expires ?? undefined,
 			accessToken: row.accessToken,
+			refreshToken: row.refreshToken ?? undefined,
+			refreshTokenExpires: row.refreshTokenExpires ?? undefined,
 			onlineAccessInfo: row.userId
 				? {
 						expires_in: 0,

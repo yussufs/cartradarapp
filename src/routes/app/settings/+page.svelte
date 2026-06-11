@@ -39,10 +39,6 @@
 	const emailRecipients = $derived(recipients.filter((r) => r.channel === 'email'));
 	const smsRecipients = $derived(recipients.filter((r) => r.channel === 'sms'));
 
-	// Plan info
-	let smsAvailable = $state(false);
-	let alertsUsed = $state(0);
-	let alertLimit = $state<number | null>(10);
 	let currency = $state('USD');
 
 	const inactivityOptions = [
@@ -91,9 +87,6 @@
 			slackWebhookUrl = data.channels.slackWebhookUrl ?? '';
 			smsEnabled = data.channels.smsEnabled;
 
-			smsAvailable = data.plan.smsAvailable;
-			alertsUsed = data.plan.alertsUsed;
-			alertLimit = data.plan.alertLimit;
 			currency = data.currency;
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load settings';
@@ -326,45 +319,25 @@
 				subtitle="Each number gets a code by text to confirm before alerts start."
 			>
 				<div class="form-stack">
-					{#if !smsAvailable}
-						<Banner tone="info">
-							<p>
-								SMS alerts are available on paid plans. Email and Slack alerts are included free.
-							</p>
-						</Banner>
-					{/if}
 					<Switch
 						label="SMS"
 						name="smsEnabled"
 						checked={smsEnabled}
-						disabled={!smsAvailable}
 						onchange={(e) => (smsEnabled = (e.target as HTMLInputElement).checked)}
 					/>
 					<RecipientManager
 						channel="sms"
 						inputType="tel"
 						placeholder="+15551234567"
-						disabled={!smsAvailable}
 						recipients={smsRecipients}
 						{authFetch}
 						onchange={loadRecipients}
 					/>
-					{#if smsAvailable && smsEnabled && smsRecipients.filter((r) => r.verified).length === 0}
+					{#if smsEnabled && smsRecipients.filter((r) => r.verified).length === 0}
 						<p class="hint">Add and verify at least one number to receive SMS alerts.</p>
 					{/if}
 				</div>
 			</Card>
-
-			{#if alertLimit !== null}
-				<Banner tone={alertsUsed >= alertLimit ? 'warning' : 'info'} title="Free plan usage">
-					<p>
-						{alertsUsed} of {alertLimit} alerts used this period.
-						{#if alertsUsed >= alertLimit}
-							High-value carts are currently going unalerted — upgrade to keep alerts flowing.
-						{/if}
-					</p>
-				</Banner>
-			{/if}
 		</div>
 	{/if}
 </Page>

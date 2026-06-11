@@ -15,7 +15,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			.update(shops)
 			.set({
 				uninstalledAt: new Date(),
-				plan: 'free',
+				billingActive: false,
 				billingSubscriptionId: null,
 				usageLineItemId: null
 			})

@@ -1,4 +1,5 @@
 import type { RequestEvent } from '@sveltejs/kit';
+import { RequestedTokenType } from '@shopify/shopify-api';
 import { shopify, getOfflineSessionId, Session } from '$lib/server/shopify';
 import { createAdmin, type AdminClient } from '$lib/server/shopify/graphql';
 import { db } from '$lib/server/db';
@@ -31,6 +32,7 @@ export async function authenticateRequest(request: Request, idToken?: string): P
 
 	// Try to load existing session
 	let session = await shopify.sessionStorage.loadSession(sessionId);
+	const isNewInstall = !session;
 
 	// Check if session exists with valid scopes
 	if (session?.accessToken) {
@@ -44,14 +46,19 @@ export async function authenticateRequest(request: Request, idToken?: string): P
 				session = undefined;
 			}
 		}
+		// Legacy non-expiring tokens are rejected by Shopify; expired tokens need
+		// a refresh. Either way, a fresh token exchange mints a valid session.
+		if (session && (!session.refreshToken || session.isExpired(EXPIRY_BUFFER_MS))) {
+			session = undefined;
+		}
 	} else {
 		session = undefined;
 	}
 
-	// No valid session — perform token exchange (this is install / re-auth)
+	// No valid session — perform token exchange (install, re-auth, or token expiry)
 	if (!session) {
-		session = await performTokenExchange(shop, token, sessionId);
-		await captureShopProfile(session);
+		session = await performTokenExchange(shop, token);
+		if (isNewInstall) await captureShopProfile(session);
 	}
 
 	const admin = createAdmin(session);
@@ -91,58 +98,75 @@ async function captureShopProfile(session: Session): Promise<void> {
 }
 
 /**
- * Perform Shopify token exchange to obtain an offline access token.
+ * Perform Shopify token exchange to obtain an expiring offline access token.
+ * Shopify no longer accepts non-expiring tokens on the Admin API, so the
+ * resulting session carries expires + refreshToken for later renewal.
  * https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/token-exchange
  */
-async function performTokenExchange(
-	shop: string,
-	sessionToken: string,
-	sessionId: string
-): Promise<Session> {
-	const config = shopify.api.config;
+async function performTokenExchange(shop: string, sessionToken: string): Promise<Session> {
+	try {
+		const { session } = await shopify.api.auth.tokenExchange({
+			shop,
+			sessionToken,
+			requestedTokenType: RequestedTokenType.OfflineAccessToken,
+			expiring: true
+		});
+		await shopify.sessionStorage.storeSession(session);
+		console.log(
+			`Token exchange: stored offline session for ${shop} (expires ${session.expires?.toISOString()})`
+		);
+		return session;
+	} catch (err) {
+		console.error(`Token exchange failed for ${shop}:`, err);
+		throw new AuthError('token_exchange_failed', 'Token exchange failed');
+	}
+}
 
-	console.log(`Token exchange: requesting offline access token for ${shop}`);
+/** Refresh this far before the access token actually expires (clock skew, latency). */
+const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 
-	const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/x-www-form-urlencoded',
-			Accept: 'application/json'
-		},
-		body: new URLSearchParams({
-			client_id: config.apiKey,
-			client_secret: config.apiSecretKey,
-			grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
-			subject_token: sessionToken,
-			subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
-			requested_token_type: 'urn:shopify:params:oauth:token-type:offline-access-token'
-		})
-	});
-
-	if (!response.ok) {
-		const body = await response.text();
-		console.error('Token exchange failed:', response.status, body);
-		throw new AuthError('token_exchange_failed', `Token exchange failed: ${response.status}`);
+/**
+ * Load a usable offline session for background work (webhooks, billing) where
+ * no App Bridge id_token is available. Refreshes the access token when it is
+ * expired or about to expire, and migrates legacy non-expiring tokens in place.
+ */
+export async function getOfflineSession(shop: string): Promise<Session> {
+	const session = await shopify.sessionStorage.loadSession(getOfflineSessionId(shop));
+	if (!session?.accessToken) {
+		throw new AuthError('no_session', `No offline session for ${shop}`);
 	}
 
-	const data = (await response.json()) as {
-		access_token: string;
-		scope: string;
-	};
+	// Legacy non-expiring token: one-time, in-place migration to an expiring one.
+	if (!session.refreshToken && !session.expires) {
+		const { session: migrated } = await shopify.api.auth.migrateToExpiringToken({
+			shop,
+			nonExpiringOfflineAccessToken: session.accessToken
+		});
+		await shopify.sessionStorage.storeSession(migrated);
+		console.log(`Migrated ${shop} to an expiring offline token`);
+		return migrated;
+	}
 
-	const session = new Session({
-		id: sessionId,
+	if (!session.isExpired(EXPIRY_BUFFER_MS)) {
+		return session;
+	}
+
+	if (
+		!session.refreshToken ||
+		(session.refreshTokenExpires && session.refreshTokenExpires < new Date())
+	) {
+		throw new AuthError(
+			'refresh_token_expired',
+			`Offline token for ${shop} expired and cannot be refreshed; the merchant must reopen the app`
+		);
+	}
+
+	const { session: refreshed } = await shopify.api.auth.refreshToken({
 		shop,
-		state: '',
-		isOnline: false,
-		accessToken: data.access_token,
-		scope: data.scope
+		refreshToken: session.refreshToken
 	});
-
-	await shopify.sessionStorage.storeSession(session);
-	console.log(`Token exchange: stored offline session for ${shop}`);
-
-	return session;
+	await shopify.sessionStorage.storeSession(refreshed);
+	return refreshed;
 }
 
 /**

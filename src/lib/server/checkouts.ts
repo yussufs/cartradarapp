@@ -12,6 +12,7 @@ import {
 	type RecoveryMatch
 } from '$lib/shared/db/schema';
 import type { CheckoutWebhookPayload, OrderWebhookPayload } from '$lib/types/shopify-webhooks';
+import { chargeRecovery } from '$lib/server/billing/subscriptions';
 
 function parseDate(value: string | null | undefined): Date | null {
 	if (!value) return null;
@@ -118,8 +119,10 @@ async function markRecovered(
 	orderId: string,
 	amount: string | null,
 	match: RecoveryMatch
-): Promise<void> {
-	await db
+): Promise<boolean> {
+	// Status-guarded: a cart can only go alerted -> recovered once, so concurrent
+	// or duplicate webhooks can't flip the same cart (or bill it) twice.
+	const updated = await db
 		.update(checkouts)
 		.set({
 			status: 'recovered',
@@ -129,7 +132,9 @@ async function markRecovered(
 			recoveryMatch: match,
 			updatedAt: new Date()
 		})
-		.where(eq(checkouts.id, checkoutId));
+		.where(and(eq(checkouts.id, checkoutId), eq(checkouts.status, 'alerted')))
+		.returning({ id: checkouts.id });
+	return updated.length > 0;
 }
 
 /**
@@ -148,6 +153,16 @@ export async function markCheckoutOrdered(
 	const orderCreatedAt = parseDate(payload.created_at) ?? new Date();
 	const token = payload.checkout_token;
 
+	// Idempotency: orders/create is delivered at-least-once. If this order has
+	// already recovered a cart for this shop, stop — never attribute (or bill)
+	// the same order against a second cart on redelivery.
+	const [alreadyAttributed] = await db
+		.select({ id: checkouts.id })
+		.from(checkouts)
+		.where(and(eq(checkouts.shop, shop), eq(checkouts.recoveredOrderId, orderId)))
+		.limit(1);
+	if (alreadyAttributed) return;
+
 	// 1. Exact token match
 	let tokenCheckout: { id: string; status: CheckoutStatus } | undefined;
 	if (token) {
@@ -161,15 +176,35 @@ export async function markCheckoutOrdered(
 	if (tokenCheckout) {
 		if (tokenCheckout.status === 'recovered' || tokenCheckout.status === 'completed') return;
 		if (tokenCheckout.status === 'alerted') {
-			await markRecovered(tokenCheckout.id, orderId, payload.total_price ?? null, 'token');
-			console.log(`Recovered (token) checkout for ${shop} via order ${orderRef}`);
+			const recovered = await markRecovered(
+				tokenCheckout.id,
+				orderId,
+				payload.total_price ?? null,
+				'token'
+			);
+			if (recovered) {
+				console.log(`Recovered (token) checkout for ${shop} via order ${orderRef}`);
+				// Bill the success fee — exact (token) recoveries only
+				try {
+					await chargeRecovery(
+						shop,
+						tokenCheckout.id,
+						orderId,
+						payload.total_price ?? null,
+						payload.currency ?? 'USD'
+					);
+				} catch (err) {
+					console.error(`Failed to bill recovery fee for ${shop}:`, err);
+				}
+			}
 			return;
 		}
-		// Same checkout completed without an alert — record completion, then still
-		// check whether this order recovers a *different* alerted cart (below).
+		// Same checkout completed without an alert — record completion (not a
+		// recovery, so no recoveredOrderId), then still check whether this order
+		// recovers a *different* alerted cart (below).
 		await db
 			.update(checkouts)
-			.set({ status: 'completed', recoveredOrderId: orderId, updatedAt: new Date() })
+			.set({ status: 'completed', updatedAt: new Date() })
 			.where(eq(checkouts.id, tokenCheckout.id));
 	}
 
@@ -216,6 +251,13 @@ export async function markCheckoutOrdered(
 
 	const matchedByEmail = !!email && (match.customerEmail ?? '').toLowerCase() === email;
 	const recoveryMatch: RecoveryMatch = matchedByEmail ? 'email' : 'phone';
-	await markRecovered(match.id, orderId, payload.total_price ?? null, recoveryMatch);
-	console.log(`Recovered (inferred:${recoveryMatch}) checkout for ${shop} via order ${orderRef}`);
+	const recovered = await markRecovered(
+		match.id,
+		orderId,
+		payload.total_price ?? null,
+		recoveryMatch
+	);
+	if (recovered) {
+		console.log(`Recovered (inferred:${recoveryMatch}) checkout for ${shop} via order ${orderRef}`);
+	}
 }

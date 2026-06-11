@@ -6,7 +6,6 @@ import { db } from '$lib/server/db';
 import { alertRules, alerts, channelSettings, checkouts, shops } from '$lib/shared/db/schema';
 import { ensureShopRow } from '$lib/server/checkouts';
 import { hasVerifiedRecipient } from '$lib/server/recipients';
-import { PLANS } from '$lib/server/billing/plans';
 
 const WINDOW_DAYS = 30;
 
@@ -90,7 +89,6 @@ export const GET: RequestHandler = async ({ request }) => {
 		((channels.emailEnabled && (await hasVerifiedRecipient(shop, 'email'))) ||
 			(channels.slackEnabled && !!channels.slackWebhookUrl) ||
 			(channels.smsEnabled && (await hasVerifiedRecipient(shop, 'sms'))));
-	const plan = PLANS[shopRow.plan];
 
 	return json({
 		windowDays: WINDOW_DAYS,
@@ -106,12 +104,8 @@ export const GET: RequestHandler = async ({ request }) => {
 		recent,
 		setup: {
 			ruleConfigured: !!rule && rule.enabled,
-			channelConfigured: hasChannel
-		},
-		plan: {
-			plan: shopRow.plan,
-			alertsUsed: shopRow.alertsUsedThisPeriod,
-			alertLimit: plan.alertLimit
+			channelConfigured: hasChannel,
+			billingActive: shopRow.billingActive
 		}
 	});
 };

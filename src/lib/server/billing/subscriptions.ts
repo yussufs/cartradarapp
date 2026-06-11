@@ -1,20 +1,19 @@
 /**
- * Shopify Billing API integration: subscription create/cancel, usage records,
- * and syncing the usage line item ID after a subscription activates.
+ * Shopify Billing: a single usage-based subscription ($0 recurring, one usage
+ * line item) that the merchant approves once. Each recovered cart is billed as
+ * a usage record — the 1% / $1-minimum success fee.
  */
 import { eq } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
-import { shopify, getOfflineSessionId } from '$lib/server/shopify';
+import { getOfflineSession } from '$lib/server/shopify/auth';
 import { createAdmin, throwOnErrors, type AdminClient } from '$lib/server/shopify/graphql';
 import { db } from '$lib/server/db';
-import { shops, usageCharges, type ShopPlan } from '$lib/shared/db/schema';
-import { PLANS } from './plans';
-import { adminAppUrl } from '$lib/server/alerts/format';
+import { shops, usageCharges } from '$lib/shared/db/schema';
+import { BILLING, recoveryFeeUsd } from './plans';
+import { adminAppUrl, formatMoney } from '$lib/server/alerts/format';
 
 async function getOfflineAdmin(shop: string): Promise<AdminClient> {
-	const session = await shopify.sessionStorage.loadSession(getOfflineSessionId(shop));
-	if (!session) throw new Error(`No offline session for ${shop}`);
-	return createAdmin(session);
+	return createAdmin(await getOfflineSession(shop));
 }
 
 interface UserError {
@@ -29,27 +28,17 @@ function throwOnUserErrors(userErrors: UserError[] | undefined, context: string)
 }
 
 /**
- * Creates a Pro/Scale subscription (recurring + SMS usage line item) and
- * returns the confirmation URL the merchant must approve.
- * Activation lands via the app_subscriptions/update webhook.
+ * Creates the usage-based subscription and returns the confirmation URL the
+ * merchant must approve. Activation lands via app_subscriptions/update.
  */
-export async function createSubscription(shop: string, plan: ShopPlan): Promise<string> {
-	const definition = PLANS[plan];
-	if (!definition.subscriptionName || definition.smsPricing === null) {
-		throw new Error(`Plan ${plan} has no paid subscription`);
-	}
-	const smsPricing = definition.smsPricing;
-
+export async function activateBilling(shop: string): Promise<string> {
 	const admin = await getOfflineAdmin(shop);
 
 	const response = await admin.graphql<{
-		appSubscriptionCreate: {
-			userErrors: UserError[];
-			confirmationUrl: string | null;
-		};
+		appSubscriptionCreate: { userErrors: UserError[]; confirmationUrl: string | null };
 	}>(
 		`#graphql
-		mutation CartRadarSubscriptionCreate(
+		mutation CartRadarBillingActivate(
 			$name: String!
 			$returnUrl: URL!
 			$lineItems: [AppSubscriptionLineItemInput!]!
@@ -63,25 +52,16 @@ export async function createSubscription(shop: string, plan: ShopPlan): Promise<
 		}`,
 		{
 			variables: {
-				name: definition.subscriptionName,
+				name: BILLING.subscriptionName,
 				returnUrl: adminAppUrl(shop, '/app/billing'),
 				test: env.BILLING_TEST_MODE === 'true',
 				lineItems: [
 					{
 						plan: {
-							appRecurringPricingDetails: {
-								// MoneyInput.amount is a Decimal scalar — serialize as a string
-								price: { amount: definition.monthlyPriceUsd.toFixed(2), currencyCode: 'USD' },
-								interval: 'EVERY_30_DAYS'
-							}
-						}
-					},
-					{
-						plan: {
 							appUsagePricingDetails: {
-								terms: `${definition.includedSms} US/Canada SMS alerts included each 30 days, then $${smsPricing.domestic.toFixed(2)} each. International SMS $${smsPricing.international.toFixed(2)} each.`,
+								terms: `${(BILLING.feeRate * 100).toFixed(0)}% of each recovered cart's order value, $${BILLING.minFeeUsd.toFixed(2)} minimum per recovery. No monthly fee.`,
 								cappedAmount: {
-									amount: definition.defaultCappedAmountUsd.toFixed(2),
+									amount: BILLING.defaultCappedAmountUsd.toFixed(2),
 									currencyCode: 'USD'
 								}
 							}
@@ -100,7 +80,7 @@ export async function createSubscription(shop: string, plan: ShopPlan): Promise<
 	return data.appSubscriptionCreate.confirmationUrl;
 }
 
-/** Cancels the active subscription (merchant downgrades to free). */
+/** Cancels the active subscription (merchant opts out of billing). */
 export async function cancelSubscription(shop: string): Promise<void> {
 	const [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
 	if (!shopRow?.billingSubscriptionId) return;
@@ -110,7 +90,7 @@ export async function cancelSubscription(shop: string): Promise<void> {
 		appSubscriptionCancel: { userErrors: UserError[] };
 	}>(
 		`#graphql
-		mutation CartRadarSubscriptionCancel($id: ID!) {
+		mutation CartRadarBillingCancel($id: ID!) {
 			appSubscriptionCancel(id: $id) {
 				userErrors { field message }
 				appSubscription { id status }
@@ -121,30 +101,33 @@ export async function cancelSubscription(shop: string): Promise<void> {
 
 	const data = throwOnErrors(response);
 	throwOnUserErrors(data.appSubscriptionCancel.userErrors, 'appSubscriptionCancel');
-	// The app_subscriptions/update webhook downgrades the shop row to free
+	// The app_subscriptions/update webhook flips billingActive off
 }
 
 /**
- * After a subscription activates, look up its usage line item ID and store it
- * so SMS overage can be charged via appUsageRecordCreate.
+ * Reconciles local billing state against Shopify's active subscriptions —
+ * the source of truth. Stores the subscription and usage line item IDs so
+ * recovery fees can be billed. Returns whether billing is active.
+ *
+ * Called from the app_subscriptions/update webhook, and as a fallback from
+ * the billing API when the webhook was missed (e.g. delivered to another
+ * environment during development).
  */
-export async function syncUsageLineItemId(shop: string): Promise<void> {
+export async function syncBillingState(shop: string): Promise<boolean> {
 	const admin = await getOfflineAdmin(shop);
 	const response = await admin.graphql<{
 		currentAppInstallation: {
 			activeSubscriptions: Array<{
 				id: string;
-				name: string;
 				lineItems: Array<{ id: string; plan: { pricingDetails: { __typename: string } } }>;
 			}>;
 		};
 	}>(
 		`#graphql
-		query CartRadarActiveSubscriptions {
+		query CartRadarUsageLineItem {
 			currentAppInstallation {
 				activeSubscriptions {
 					id
-					name
 					lineItems {
 						id
 						plan { pricingDetails { __typename } }
@@ -156,7 +139,14 @@ export async function syncUsageLineItemId(shop: string): Promise<void> {
 
 	const data = throwOnErrors(response);
 	const subscription = data.currentAppInstallation.activeSubscriptions[0];
-	if (!subscription) return;
+
+	if (!subscription) {
+		await db
+			.update(shops)
+			.set({ billingActive: false, billingSubscriptionId: null, usageLineItemId: null })
+			.where(eq(shops.shop, shop));
+		return false;
+	}
 
 	const usageLineItem = subscription.lineItems.find(
 		(item) => item.plan.pricingDetails.__typename === 'AppUsagePricing'
@@ -165,49 +155,51 @@ export async function syncUsageLineItemId(shop: string): Promise<void> {
 	await db
 		.update(shops)
 		.set({
+			billingActive: true,
 			billingSubscriptionId: subscription.id,
 			usageLineItemId: usageLineItem?.id ?? null
 		})
 		.where(eq(shops.shop, shop));
+	return true;
 }
 
 /**
- * Records SMS overage: writes the audit row, then pushes a usage record to
- * Shopify. A cap-exceeded error is logged but never blocks the alert itself.
+ * Bills the success fee for a recovered cart. Always writes the audit row; pushes
+ * a Shopify usage record when billing is active. A cap-exceeded error is logged
+ * but never blocks recovery tracking. Idempotent per recovered checkout.
  */
-export async function recordSmsOverage(
+export async function chargeRecovery(
 	shop: string,
 	checkoutId: string,
-	amount: string,
-	description: string
+	orderId: string,
+	recoveredAmount: string | null,
+	currency: string
 ): Promise<void> {
-	const idempotencyKey = `sms-overage-${checkoutId}`;
+	const orderTotal = parseFloat(recoveredAmount ?? '0');
+	const amount = recoveryFeeUsd(orderTotal).toFixed(2);
+	const idempotencyKey = `recovery-${checkoutId}`;
 
 	const inserted = await db
 		.insert(usageCharges)
-		.values({ shop, amount, idempotencyKey })
+		.values({ shop, checkoutId, orderId, recoveredAmount, amount, idempotencyKey })
 		.onConflictDoNothing()
 		.returning({ id: usageCharges.id });
-	if (inserted.length === 0) return; // already charged for this checkout
+	if (inserted.length === 0) return; // already billed for this recovery
 
 	const [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
-	if (!shopRow?.usageLineItemId) {
-		console.warn(
-			`No usage line item for ${shop}; SMS overage of $${amount} recorded but not charged`
-		);
+	if (!shopRow?.billingActive || !shopRow.usageLineItemId) {
+		console.warn(`Billing inactive for ${shop}; recovery fee $${amount} recorded but not charged`);
 		return;
 	}
 
 	try {
 		const admin = await getOfflineAdmin(shop);
+		const recovered = formatMoney(orderTotal, currency);
 		const response = await admin.graphql<{
-			appUsageRecordCreate: {
-				userErrors: UserError[];
-				appUsageRecord: { id: string } | null;
-			};
+			appUsageRecordCreate: { userErrors: UserError[]; appUsageRecord: { id: string } | null };
 		}>(
 			`#graphql
-			mutation CartRadarUsageRecordCreate(
+			mutation CartRadarRecoveryCharge(
 				$subscriptionLineItemId: ID!
 				$price: MoneyInput!
 				$description: String!
@@ -227,7 +219,7 @@ export async function recordSmsOverage(
 				variables: {
 					subscriptionLineItemId: shopRow.usageLineItemId,
 					price: { amount, currencyCode: 'USD' },
-					description,
+					description: `Recovery fee — ${recovered} cart recovered (order ${orderId})`,
 					idempotencyKey
 				}
 			}
@@ -243,7 +235,7 @@ export async function recordSmsOverage(
 				.where(eq(usageCharges.id, inserted[0].id));
 		}
 	} catch (err) {
-		// Most likely the usage cap was reached — alert already went out, so just log
-		console.error(`Failed to push usage record for ${shop}:`, err);
+		// Most likely the usage cap was reached — recovery is already tracked, so just log
+		console.error(`Failed to push recovery fee for ${shop}:`, err);
 	}
 }
