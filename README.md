@@ -50,6 +50,34 @@ cd my-shopify-app
 # Or use as a template on GitHub
 ```
 
+#### Track the template for future updates
+
+Add this template as an `upstream` remote so you can pull in improvements later
+without losing your own work. `origin` should point at your app's repository,
+and `upstream` at this template.
+
+```bash
+# Add the template as an upstream remote
+git remote add upstream https://github.com/yussufs/svelteshopifytemplate.git
+
+# Disable pushing to upstream so you can't accidentally push to the template
+git remote set-url --push upstream DISABLE
+
+# Verify your remotes (upstream push should show DISABLE)
+git remote -v
+
+# Later, pull in template updates
+git fetch upstream
+git merge upstream/main   # or: git rebase upstream/main
+```
+
+The `set-url --push upstream DISABLE` line keeps `git fetch upstream` working
+while making any `git push upstream` fail immediately (`DISABLE` is not a valid
+URL), so you can never accidentally push your app's code back to the template.
+
+Resolve any merge conflicts, then commit. Review the changes before merging,
+since the template may update files you've customized.
+
 ### 2. Install Dependencies
 
 ```bash
