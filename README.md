@@ -92,12 +92,18 @@ Start the local PostgreSQL database:
 docker compose up -d
 ```
 
-Copy the environment file and push the database schema:
+Copy the environment file and apply the database schema:
 
 ```bash
 cp .env.example .env
-pnpm run db:push
+pnpm run db:migrate
 ```
+
+`db:migrate` applies the versioned SQL migrations in `drizzle/` to your
+database — this is the recommended workflow (see
+[Database Migrations](#database-migrations)). For quick local prototyping you
+can instead use `pnpm run db:push`, which syncs `schema.ts` straight to the DB
+without generating migration files.
 
 ### 4. Configure Shopify App
 
@@ -244,11 +250,31 @@ pnpm run graphql-codegen
 
 ### Database Migrations
 
-Push schema changes to the database:
+This template uses Drizzle's **migration** workflow: schema changes are turned
+into versioned SQL files under `drizzle/` that you commit to source control and
+apply to each environment. This gives you a reviewable, repeatable history and a
+safe path to production (unlike `db:push`, which can make destructive changes
+without a migration artifact).
+
+After editing `src/lib/shared/db/schema.ts`, generate a migration:
 
 ```bash
-pnpm run db:push
+pnpm run db:generate
 ```
+
+Review the generated SQL in `drizzle/`, commit it, then apply it to the
+database:
+
+```bash
+pnpm run db:migrate
+```
+
+On a fresh clone (or when deploying), run `pnpm run db:migrate` to bring the
+database up to date with all committed migrations.
+
+**Prototyping shortcut:** `pnpm run db:push` syncs `schema.ts` directly to the
+database without creating a migration file. Handy for fast local iteration, but
+don't rely on it for production — generate a migration before you commit.
 
 Open Drizzle Studio to browse data:
 
@@ -435,7 +461,7 @@ redirect_urls = ["https://your-app.com/auth/callback"]
 
 1. Verify PostgreSQL is running: `docker compose ps`
 2. Check `DATABASE_URL` in `.env`
-3. Push schema: `pnpm run db:push`
+3. Apply migrations: `pnpm run db:migrate`
 
 ### GraphQL type errors
 
