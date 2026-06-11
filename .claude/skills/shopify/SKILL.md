@@ -10,6 +10,7 @@ When the user asks questions about Shopify development, you MUST spawn a subagen
 ## When to Use This Skill
 
 Trigger this skill when the user asks about:
+
 - Shopify Admin API or Storefront API
 - GraphQL queries, mutations, or schema
 - Polaris components or App Bridge

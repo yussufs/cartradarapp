@@ -94,13 +94,33 @@
 	--shadow-400: 0rem 0.5rem 1rem -0.25rem rgba(26, 26, 26, 0.22);
 	--shadow-500: 0rem 0.75rem 1.25rem -0.5rem rgba(26, 26, 26, 0.24);
 	--shadow-600: 0rem 1.25rem 1.25rem -0.5rem rgba(26, 26, 26, 0.28);
-	--shadow-bevel-100: 0.0625rem 0rem 0rem 0rem rgba(0, 0, 0, 0.13) inset, -0.0625rem 0rem 0rem 0rem rgba(0, 0, 0, 0.13) inset, 0rem -0.0625rem 0rem 0rem rgba(0, 0, 0, 0.17) inset, 0rem 0.0625rem 0rem 0rem rgba(204, 204, 204, 0.5) inset;
-	--shadow-inset-100: 0rem 0.0625rem 0.125rem 0rem rgba(26, 26, 26, 0.15) inset, 0rem 0.0625rem 0.0625rem 0rem rgba(26, 26, 26, 0.15) inset;
-	--shadow-inset-200: 0rem 0.125rem 0.0625rem 0rem rgba(26, 26, 26, 0.2) inset, 0.0625rem 0rem 0.0625rem 0rem rgba(26, 26, 26, 0.12) inset, -0.0625rem 0rem 0.0625rem 0rem rgba(26, 26, 26, 0.12) inset;
-	--shadow-button: 0rem -0.0625rem 0rem 0rem #b5b5b5 inset, 0rem 0rem 0rem 0.0625rem rgba(0, 0, 0, 0.1) inset, 0rem 0.03125rem 0rem 0.09375rem #fff inset;
-	--shadow-button-primary: 0rem -0.0625rem 0rem 0.0625rem rgba(0, 0, 0, 0.8) inset, 0rem 0rem 0rem 0.0625rem rgba(48, 48, 48, 1) inset, 0rem 0.03125rem 0rem 0.09375rem rgba(255, 255, 255, 0.25) inset;
-	--shadow-button-primary-hover: 0rem 0.0625rem 0rem 0rem rgba(255, 255, 255, 0.24) inset, 0.0625rem 0rem 0rem 0rem rgba(255, 255, 255, 0.2) inset, -0.0625rem 0rem 0rem 0rem rgba(255, 255, 255, 0.2) inset, 0rem -0.0625rem 0rem 0rem #000 inset;
-	--shadow-button-inset: -0.0625rem 0rem 0.0625rem 0rem rgba(26, 26, 26, 0.122) inset, 0.0625rem 0rem 0.0625rem 0rem rgba(26, 26, 26, 0.122) inset, 0rem 0.125rem 0.0625rem 0rem rgba(26, 26, 26, 0.2) inset;
+	--shadow-bevel-100:
+		0.0625rem 0rem 0rem 0rem rgba(0, 0, 0, 0.13) inset,
+		-0.0625rem 0rem 0rem 0rem rgba(0, 0, 0, 0.13) inset,
+		0rem -0.0625rem 0rem 0rem rgba(0, 0, 0, 0.17) inset,
+		0rem 0.0625rem 0rem 0rem rgba(204, 204, 204, 0.5) inset;
+	--shadow-inset-100:
+		0rem 0.0625rem 0.125rem 0rem rgba(26, 26, 26, 0.15) inset,
+		0rem 0.0625rem 0.0625rem 0rem rgba(26, 26, 26, 0.15) inset;
+	--shadow-inset-200:
+		0rem 0.125rem 0.0625rem 0rem rgba(26, 26, 26, 0.2) inset,
+		0.0625rem 0rem 0.0625rem 0rem rgba(26, 26, 26, 0.12) inset,
+		-0.0625rem 0rem 0.0625rem 0rem rgba(26, 26, 26, 0.12) inset;
+	--shadow-button:
+		0rem -0.0625rem 0rem 0rem #b5b5b5 inset, 0rem 0rem 0rem 0.0625rem rgba(0, 0, 0, 0.1) inset,
+		0rem 0.03125rem 0rem 0.09375rem #fff inset;
+	--shadow-button-primary:
+		0rem -0.0625rem 0rem 0.0625rem rgba(0, 0, 0, 0.8) inset,
+		0rem 0rem 0rem 0.0625rem rgba(48, 48, 48, 1) inset,
+		0rem 0.03125rem 0rem 0.09375rem rgba(255, 255, 255, 0.25) inset;
+	--shadow-button-primary-hover:
+		0rem 0.0625rem 0rem 0rem rgba(255, 255, 255, 0.24) inset,
+		0.0625rem 0rem 0rem 0rem rgba(255, 255, 255, 0.2) inset,
+		-0.0625rem 0rem 0rem 0rem rgba(255, 255, 255, 0.2) inset, 0rem -0.0625rem 0rem 0rem #000 inset;
+	--shadow-button-inset:
+		-0.0625rem 0rem 0.0625rem 0rem rgba(26, 26, 26, 0.122) inset,
+		0.0625rem 0rem 0.0625rem 0rem rgba(26, 26, 26, 0.122) inset,
+		0rem 0.125rem 0.0625rem 0rem rgba(26, 26, 26, 0.2) inset;
 	--shadow-card: var(--shadow-200);
 	/* Aliases */
 	--shadow-xs: var(--shadow-100);
@@ -160,8 +180,11 @@
 	--width-800: 2rem;
 
 	/* Typography */
-	--font-family-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-	--font-family-mono: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+	--font-family-sans:
+		'Inter', -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto,
+		'Helvetica Neue', sans-serif;
+	--font-family-mono:
+		ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
 	--font-family: var(--font-family-sans);
 
 	/* Font Sizes */

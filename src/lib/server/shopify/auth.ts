@@ -1,6 +1,8 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { shopify, getOfflineSessionId, Session } from '$lib/server/shopify';
 import { createAdmin, type AdminClient } from '$lib/server/shopify/graphql';
+import { db } from '$lib/server/db';
+import { shops } from '$lib/shared/db/schema';
 
 export interface AuthResult {
 	session: Session;
@@ -13,10 +15,7 @@ export interface AuthResult {
  * If no offline session exists (or scopes are insufficient), performs token exchange
  * to obtain an offline access token from Shopify.
  */
-export async function authenticateRequest(
-	request: Request,
-	idToken?: string
-): Promise<AuthResult> {
+export async function authenticateRequest(request: Request, idToken?: string): Promise<AuthResult> {
 	let token = idToken;
 
 	if (!token) {
@@ -39,9 +38,7 @@ export async function authenticateRequest(
 		if (requiredScopes && session.scope) {
 			const sessionScopes = session.scope.split(',').map((s: string) => s.trim());
 			const requiredScopesArray = requiredScopes.toArray();
-			const hasScopes = requiredScopesArray.every((scope: string) =>
-				sessionScopes.includes(scope)
-			);
+			const hasScopes = requiredScopesArray.every((scope: string) => sessionScopes.includes(scope));
 			if (!hasScopes) {
 				// Insufficient scopes — force token exchange
 				session = undefined;
@@ -51,13 +48,46 @@ export async function authenticateRequest(
 		session = undefined;
 	}
 
-	// No valid session — perform token exchange
+	// No valid session — perform token exchange (this is install / re-auth)
 	if (!session) {
 		session = await performTokenExchange(shop, token, sessionId);
+		await captureShopProfile(session);
 	}
 
 	const admin = createAdmin(session);
 	return { session, admin };
+}
+
+/**
+ * Capture the store's base currency and name at install / re-auth so the
+ * settings UI shows the right currency from the first visit.
+ * Best-effort: a failure here must never block authentication.
+ */
+async function captureShopProfile(session: Session): Promise<void> {
+	try {
+		const admin = createAdmin(session);
+		const response = await admin.graphql<{ shop: { name: string; currencyCode: string } }>(
+			`#graphql
+			query CartRadarShopProfile {
+				shop {
+					name
+					currencyCode
+				}
+			}`
+		);
+		const shopData = response.data?.shop;
+		if (!shopData) return;
+
+		await db
+			.insert(shops)
+			.values({ shop: session.shop, shopName: shopData.name, currency: shopData.currencyCode })
+			.onConflictDoUpdate({
+				target: shops.shop,
+				set: { shopName: shopData.name, currency: shopData.currencyCode }
+			});
+	} catch (err) {
+		console.error(`Failed to capture shop profile for ${session.shop}:`, err);
+	}
 }
 
 /**
@@ -77,7 +107,7 @@ async function performTokenExchange(
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/x-www-form-urlencoded',
-			'Accept': 'application/json'
+			Accept: 'application/json'
 		},
 		body: new URLSearchParams({
 			client_id: config.apiKey,

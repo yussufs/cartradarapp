@@ -1,41 +1,41 @@
-import fs from "fs";
-import { ApiVersion } from "@shopify/shopify-api";
-import { shopifyApiProject, ApiType } from "@shopify/api-codegen-preset";
-import type { IGraphQLConfig } from "graphql-config";
+import fs from 'fs';
+import { ApiVersion } from '@shopify/shopify-api';
+import { shopifyApiProject, ApiType } from '@shopify/api-codegen-preset';
+import type { IGraphQLConfig } from 'graphql-config';
 
 function getConfig() {
-  const config: IGraphQLConfig = {
-    projects: {
-      default: shopifyApiProject({
-        apiType: ApiType.Admin,
-        apiVersion: ApiVersion.October25,
-        documents: ["./src/**/*.{js,ts,svelte}"],
-        outputDir: "./src/lib/types",
-      }),
-    },
-  };
+	const config: IGraphQLConfig = {
+		projects: {
+			default: shopifyApiProject({
+				apiType: ApiType.Admin,
+				apiVersion: ApiVersion.October25,
+				documents: ['./src/**/*.{js,ts,svelte}'],
+				outputDir: './src/lib/types'
+			})
+		}
+	};
 
-  // Support for extensions (if any)
-  let extensions: string[] = [];
-  try {
-    extensions = fs.readdirSync("./extensions");
-  } catch {
-    // ignore if no extensions
-  }
+	// Support for extensions (if any)
+	let extensions: string[] = [];
+	try {
+		extensions = fs.readdirSync('./extensions');
+	} catch {
+		// ignore if no extensions
+	}
 
-  for (const entry of extensions) {
-    const extensionPath = `./extensions/${entry}`;
-    const schema = `${extensionPath}/schema.graphql`;
-    if (!fs.existsSync(schema)) {
-      continue;
-    }
-    config.projects[entry] = {
-      schema,
-      documents: [`${extensionPath}/**/*.graphql`],
-    };
-  }
+	for (const entry of extensions) {
+		const extensionPath = `./extensions/${entry}`;
+		const schema = `${extensionPath}/schema.graphql`;
+		if (!fs.existsSync(schema)) {
+			continue;
+		}
+		config.projects[entry] = {
+			schema,
+			documents: [`${extensionPath}/**/*.graphql`]
+		};
+	}
 
-  return config;
+	return config;
 }
 
 const config = getConfig();

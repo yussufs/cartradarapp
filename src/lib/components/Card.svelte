@@ -31,7 +31,12 @@
 			{/if}
 		</div>
 	{/if}
-	<div class="card-body" class:padding-none={padding === 'none'} class:padding-tight={padding === 'tight'} class:padding-loose={padding === 'loose'}>
+	<div
+		class="card-body"
+		class:padding-none={padding === 'none'}
+		class:padding-tight={padding === 'tight'}
+		class:padding-loose={padding === 'loose'}
+	>
 		{@render children()}
 	</div>
 	{#if footer}

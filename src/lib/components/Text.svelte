@@ -3,7 +3,15 @@
 
 	interface Props {
 		as?: 'span' | 'p' | 'div' | 'label';
-		variant?: 'bodyMd' | 'bodySm' | 'bodyLg' | 'headingXs' | 'headingSm' | 'headingMd' | 'headingLg' | 'headingXl';
+		variant?:
+			| 'bodyMd'
+			| 'bodySm'
+			| 'bodyLg'
+			| 'headingXs'
+			| 'headingSm'
+			| 'headingMd'
+			| 'headingLg'
+			| 'headingXl';
 		tone?: 'default' | 'subdued' | 'success' | 'critical' | 'warning';
 		fontWeight?: 'regular' | 'medium' | 'semibold' | 'bold';
 		alignment?: 'start' | 'center' | 'end';

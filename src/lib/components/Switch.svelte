@@ -8,14 +8,7 @@
 		onchange?: (event: Event) => void;
 	}
 
-	let {
-		label,
-		name,
-		checked = false,
-		disabled = false,
-		helpText,
-		onchange
-	}: Props = $props();
+	let { label, name, checked = false, disabled = false, helpText, onchange }: Props = $props();
 
 	const switchId = `switch-${name}-${Math.random().toString(36).substring(7)}`;
 </script>

@@ -1,0 +1,1 @@
+ALTER TABLE "shops" ADD COLUMN "domestic_sms_used_this_period" integer DEFAULT 0 NOT NULL;

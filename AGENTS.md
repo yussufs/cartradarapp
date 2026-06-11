@@ -42,15 +42,19 @@ shopify app dev           # Start with Shopify CLI (recommended)
 You have access to the Svelte MCP server for Svelte 5 and SvelteKit documentation:
 
 ### list-sections
+
 Discover available documentation sections. Use FIRST when asked about Svelte/SvelteKit topics.
 
 ### get-documentation
+
 Retrieve full documentation for specific sections.
 
 ### svelte-autofixer
+
 Analyze Svelte code for issues. Use when writing Svelte components.
 
 ### playground-link
+
 Generate Svelte Playground links (only when requested by user).
 
 ## GraphQL Pattern
@@ -59,7 +63,7 @@ Use the `#graphql` tag for type generation:
 
 ```typescript
 const response = await admin.graphql(
-  `#graphql
+	`#graphql
     query GetShop {
       shop { name }
     }

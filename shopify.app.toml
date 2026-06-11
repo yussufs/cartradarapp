@@ -1,32 +1,48 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "a47fad88032c9fec521d884c91eb827b"
-name = "Svelte App"
-application_url = "https://example.com"
+client_id = "80458374615fa574f9490007f96f7b03"
+name = "Cart Radar | Large Cart Alerts"
+application_url = "https://cartradar.dragonapps.io"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
 
 [webhooks]
-api_version = "2026-04"
+api_version = "2026-07"
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/compliance"
+  uri = "https://cartradar.dragonapps.io/webhooks/compliance"
   compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
   [[webhooks.subscriptions]]
+  topics = [ "app_subscriptions/update", "app_subscriptions/approaching_capped_amount" ]
+  uri = "https://cartradar.dragonapps.io/webhooks/billing"
+
+  [[webhooks.subscriptions]]
+  topics = [ "checkouts/create", "checkouts/update" ]
+  uri = "https://cartradar.dragonapps.io/webhooks/checkouts"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "https://cartradar.dragonapps.io/webhooks/orders"
+
+  [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
-  uri = "/webhooks/app/scopes_update"
+  uri = "https://cartradar.dragonapps.io/webhooks/app/scopes_update"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
-  uri = "/webhooks/app/uninstalled"
+  uri = "https://cartradar.dragonapps.io/webhooks/app/uninstalled"
 
-[auth]
-redirect_urls = [ "https://example.com/auth/callback" ]
+  [[webhooks.subscriptions]]
+  topics = [ "shop/update" ]
+  uri = "https://cartradar.dragonapps.io/webhooks/shop-update"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products"
+scopes = "read_orders,read_customers"
 use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ "https://cartradar.dragonapps.io/api/auth" ]

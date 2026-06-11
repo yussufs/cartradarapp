@@ -1,8 +1,17 @@
 import type { Handle } from '@sveltejs/kit';
+import { building } from '$app/environment';
 import { authenticateRequest, getShopFromRequest, AuthError } from '$lib/server/shopify/auth';
 import { shopify } from '$lib/server/shopify';
+import { startScheduler } from '$lib/server/jobs/scheduler';
 
 const RETRY_HEADER = 'X-Shopify-Retry-Invalid-Session-Request';
+
+// Abandonment evaluator — guard against duplicate timers across dev HMR reloads
+const globals = globalThis as { __cartRadarSchedulerStarted?: boolean };
+if (!building && !globals.__cartRadarSchedulerStarted) {
+	globals.__cartRadarSchedulerStarted = true;
+	startScheduler();
+}
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const { url } = event;
@@ -21,10 +30,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 		if (authHeader?.startsWith('Bearer ') || idToken) {
 			try {
-				const { session, admin } = await authenticateRequest(
-					event.request,
-					idToken || undefined
-				);
+				const { session, admin } = await authenticateRequest(event.request, idToken || undefined);
 				event.locals.shopify = { session, admin };
 			} catch (err) {
 				console.error('Auth failed:', err);
@@ -47,8 +53,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		// App Bridge then handles session token injection for all subsequent fetches.
 
 		// Resolve with dynamic CSP for the authenticated shop
-		const shop =
-			event.locals.shopify?.session?.shop || getShopFromRequest(event);
+		const shop = event.locals.shopify?.session?.shop || getShopFromRequest(event);
 		const response = await resolve(event);
 		if (shop) {
 			response.headers.set(

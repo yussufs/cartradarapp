@@ -1,209 +1,396 @@
 <script lang="ts">
-	import { Page, Card, Button, TextField, Select, Text, Divider, Icon, Checkbox } from '$lib/components';
+	import { onMount } from 'svelte';
+	import { Page, Card, TextField, Select, Switch, Button, Banner, Skeleton } from '$lib/components';
+	import RecipientManager from './RecipientManager.svelte';
 
-	function handleSubmit(event: SubmitEvent) {
-		event.preventDefault();
-		const form = event.target as HTMLFormElement;
-		const formData = new FormData(form);
-		const formEntries = Object.fromEntries(formData);
-		console.log('Form data', formEntries);
-		window.shopify?.toast.show('Settings saved');
+	interface RecipientView {
+		id: string;
+		channel: 'email' | 'sms';
+		destination: string;
+		verified: boolean;
+		canResend: boolean;
 	}
 
-	const currencyOptions = [
-		{ value: 'usd', label: 'US Dollar ($)' },
-		{ value: 'cad', label: 'Canadian Dollar (CAD)' },
-		{ value: 'eur', label: 'Euro (\u20AC)' }
+	let isLoading = $state(true);
+	let saving = $state(false);
+	let testing = $state(false);
+	let loadError = $state('');
+	let saveErrors = $state<string[]>([]);
+	let saveSuccess = $state(false);
+	let testResult = $state<{ sent: number; failed: number; errors: string[] } | null>(null);
+
+	// Alert rule
+	let ruleEnabled = $state(true);
+	let thresholdAmount = $state('500');
+	let minItemCount = $state('');
+	let inactivityMinutes = $state('60');
+
+	// Recovery attribution
+	let attributionWindowDays = $state('14');
+
+	// Channels
+	let emailEnabled = $state(true);
+	let slackEnabled = $state(false);
+	let slackWebhookUrl = $state('');
+	let smsEnabled = $state(false);
+
+	// Recipients (managed independently of the form save)
+	let recipients = $state<RecipientView[]>([]);
+	const emailRecipients = $derived(recipients.filter((r) => r.channel === 'email'));
+	const smsRecipients = $derived(recipients.filter((r) => r.channel === 'sms'));
+
+	// Plan info
+	let smsAvailable = $state(false);
+	let alertsUsed = $state(0);
+	let alertLimit = $state<number | null>(10);
+	let currency = $state('USD');
+
+	const inactivityOptions = [
+		{ label: '15 minutes', value: '15' },
+		{ label: '30 minutes', value: '30' },
+		{ label: '1 hour (recommended)', value: '60' },
+		{ label: '2 hours', value: '120' },
+		{ label: '4 hours', value: '240' }
 	];
 
-	const frequencyOptions = [
-		{ value: 'immediately', label: 'Immediately' },
-		{ value: 'hourly', label: 'Hourly digest' },
-		{ value: 'daily', label: 'Daily digest' }
+	const attributionOptions = [
+		{ label: '7 days', value: '7' },
+		{ label: '14 days (recommended)', value: '14' },
+		{ label: '30 days', value: '30' },
+		{ label: '60 days', value: '60' },
+		{ label: '90 days', value: '90' }
 	];
+
+	async function authFetch(path: string, init?: RequestInit): Promise<Response> {
+		const token = await window.shopify.idToken();
+		return fetch(path, {
+			...init,
+			headers: { ...init?.headers, Authorization: `Bearer ${token}` }
+		});
+	}
+
+	async function loadRecipients() {
+		const response = await authFetch('/api/recipients');
+		if (response.ok) recipients = (await response.json()).recipients;
+	}
+
+	onMount(async () => {
+		try {
+			const [settingsRes] = await Promise.all([authFetch('/api/settings'), loadRecipients()]);
+			if (!settingsRes.ok) throw new Error(`Failed to load settings (${settingsRes.status})`);
+			const data = await settingsRes.json();
+
+			ruleEnabled = data.rule.enabled;
+			thresholdAmount = String(data.rule.thresholdAmount);
+			minItemCount = data.rule.minItemCount ? String(data.rule.minItemCount) : '';
+			inactivityMinutes = String(data.rule.inactivityMinutes);
+			attributionWindowDays = String(data.attributionWindowDays);
+
+			emailEnabled = data.channels.emailEnabled;
+			slackEnabled = data.channels.slackEnabled;
+			slackWebhookUrl = data.channels.slackWebhookUrl ?? '';
+			smsEnabled = data.channels.smsEnabled;
+
+			smsAvailable = data.plan.smsAvailable;
+			alertsUsed = data.plan.alertsUsed;
+			alertLimit = data.plan.alertLimit;
+			currency = data.currency;
+		} catch (err) {
+			loadError = err instanceof Error ? err.message : 'Failed to load settings';
+		} finally {
+			isLoading = false;
+		}
+	});
+
+	async function save(): Promise<boolean> {
+		saving = true;
+		saveErrors = [];
+		saveSuccess = false;
+		try {
+			const response = await authFetch('/api/settings', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					rule: {
+						enabled: ruleEnabled,
+						thresholdAmount: parseFloat(thresholdAmount),
+						minItemCount: minItemCount ? parseInt(minItemCount, 10) : null,
+						inactivityMinutes: parseInt(inactivityMinutes, 10)
+					},
+					attributionWindowDays: parseInt(attributionWindowDays, 10),
+					channels: {
+						emailEnabled,
+						slackEnabled,
+						slackWebhookUrl: slackWebhookUrl.trim() || null,
+						smsEnabled
+					}
+				})
+			});
+			if (response.status === 422) {
+				saveErrors = (await response.json()).errors;
+				return false;
+			}
+			if (!response.ok) {
+				saveErrors = ['Something went wrong while saving. Please try again.'];
+				return false;
+			}
+			saveSuccess = true;
+			window.shopify?.toast?.show('Settings saved');
+			return true;
+		} catch {
+			saveErrors = ['Something went wrong while saving. Please try again.'];
+			return false;
+		} finally {
+			saving = false;
+		}
+	}
+
+	async function sendTestAlert() {
+		testing = true;
+		testResult = null;
+		try {
+			// Test uses saved settings, so persist the form first
+			const saved = await save();
+			if (!saved) return;
+			const response = await authFetch('/api/alerts/test', { method: 'POST' });
+			testResult = await response.json();
+		} catch {
+			testResult = { sent: 0, failed: 0, errors: ['Test alert request failed'] };
+		} finally {
+			testing = false;
+		}
+	}
 </script>
 
 <svelte:head>
-	<title>Settings</title>
+	<title>Settings · Cart Radar</title>
 </svelte:head>
 
-<form data-save-bar onsubmit={handleSubmit}>
-	<Page title="Settings" narrow>
-		<!-- Store Information -->
-		<Card title="Store Information">
-			<div class="form-stack">
-				<TextField
-					label="Store name"
-					name="store-name"
-					value="Puzzlify Store"
-					placeholder="Enter store name"
-				/>
-				<TextField
-					label="Business address"
-					name="business-address"
-					value="123 Main St, Anytown, USA"
-					placeholder="Enter business address"
-				/>
-				<TextField
-					label="Store phone"
-					name="store-phone"
-					value="+1 (555) 123-4567"
-					placeholder="Enter phone number"
-				/>
-				<Select label="Primary currency" name="currency" options={currencyOptions} value="usd" />
+<Page title="Settings" subtitle="Decide which carts are worth an alert and where alerts go.">
+	{#snippet primaryAction()}
+		<Button variant="primary" loading={saving} onclick={() => save()}>Save</Button>
+	{/snippet}
+	{#snippet secondaryActions()}
+		<Button loading={testing} onclick={sendTestAlert}>Send test alert</Button>
+	{/snippet}
+
+	{#if isLoading}
+		<Card>
+			<div class="skeleton-stack">
+				<Skeleton variant="text" width="40%" />
+				<Skeleton variant="box" height="120px" />
+				<Skeleton variant="box" height="120px" />
 			</div>
 		</Card>
+	{:else if loadError}
+		<Banner tone="critical" title="Couldn't load settings">
+			<p>{loadError}</p>
+		</Banner>
+	{:else}
+		{#if saveErrors.length > 0}
+			<Banner tone="critical" title="Couldn't save settings">
+				<ul class="error-list">
+					{#each saveErrors as error (error)}
+						<li>{error}</li>
+					{/each}
+				</ul>
+			</Banner>
+		{/if}
+		{#if saveSuccess && saveErrors.length === 0}
+			<Banner tone="success" dismissible ondismiss={() => (saveSuccess = false)}>
+				<p>Settings saved.</p>
+			</Banner>
+		{/if}
+		{#if testResult}
+			<Banner
+				tone={testResult.failed > 0 || testResult.errors.length > 0 ? 'warning' : 'success'}
+				title="Test alert result"
+				dismissible
+				ondismiss={() => (testResult = null)}
+			>
+				<p>
+					{testResult.sent} sent, {testResult.failed} failed.
+					{#if testResult.errors.length > 0}
+						{testResult.errors.join(' · ')}
+					{/if}
+				</p>
+			</Banner>
+		{/if}
 
-		<!-- Notifications -->
-		<Card title="Notifications">
-			<div class="form-stack">
-				<Select
-					label="Notification frequency"
-					name="notification-frequency"
-					options={frequencyOptions}
-					value="immediately"
-				/>
-				<div class="checkbox-group">
-					<Text variant="headingSm">Notification types</Text>
-					<Checkbox
-						label="New order notifications"
-						name="notifications-new-order"
-						value="new-order"
-						checked
+		<div class="settings-stack">
+			<Card
+				title="Alert rule"
+				subtitle="An alert fires when a checkout goes quiet past the inactivity window and meets your threshold."
+			>
+				<div class="form-stack">
+					<Switch
+						label="High-value cart alerts"
+						name="ruleEnabled"
+						checked={ruleEnabled}
+						helpText={ruleEnabled ? 'Alerts are on' : 'Alerts are paused'}
+						onchange={(e) => (ruleEnabled = (e.target as HTMLInputElement).checked)}
 					/>
-					<Checkbox
-						label="Low stock alerts"
-						name="notifications-low-stock"
-						value="low-stock"
+					<TextField
+						label="Cart value threshold ({currency})"
+						name="thresholdAmount"
+						type="number"
+						value={thresholdAmount}
+						min="1"
+						step="1"
+						helpText="Alert when an abandoned cart totals at least this amount."
+						oninput={(e) => (thresholdAmount = (e.target as HTMLInputElement).value)}
 					/>
-					<Checkbox
-						label="Customer review notifications"
-						name="notifications-customer-review"
-						value="customer-review"
+					<TextField
+						label="Minimum item count (optional)"
+						name="minItemCount"
+						type="number"
+						value={minItemCount}
+						min="1"
+						step="1"
+						helpText="Also alert when a cart has at least this many items, regardless of value. Leave empty to alert on value only."
+						oninput={(e) => (minItemCount = (e.target as HTMLInputElement).value)}
 					/>
-					<Checkbox
-						label="Shipping updates"
-						name="notifications-shipping-updates"
-						value="shipping-updates"
+					<Select
+						label="Inactivity window"
+						name="inactivityMinutes"
+						options={inactivityOptions}
+						value={inactivityMinutes}
+						helpText="How long a checkout must sit untouched before it counts as abandoned."
+						onchange={(e) => (inactivityMinutes = (e.target as HTMLSelectElement).value)}
 					/>
 				</div>
-			</div>
-		</Card>
+			</Card>
 
-		<!-- Preferences -->
-		<Card title="Preferences">
-			<div class="nav-list">
-				<a href="/app/settings/shipping" class="nav-item">
-					<div class="nav-item-content">
-						<Text variant="headingSm">Shipping & fulfillment</Text>
-						<Text tone="subdued">
-							Shipping methods, rates, zones, and fulfillment preferences.
-						</Text>
-					</div>
-					<Icon name="chevron-right" tone="subdued" />
-				</a>
-				<Divider spacing="none" />
-				<a href="/app/settings/products-catalog" class="nav-item">
-					<div class="nav-item-content">
-						<Text variant="headingSm">Products & catalog</Text>
-						<Text tone="subdued">
-							Product defaults, customer experience, and catalog display options.
-						</Text>
-					</div>
-					<Icon name="chevron-right" tone="subdued" />
-				</a>
-				<Divider spacing="none" />
-				<a href="/app/settings/customer-support" class="nav-item">
-					<div class="nav-item-content">
-						<Text variant="headingSm">Customer support</Text>
-						<Text tone="subdued">
-							Support settings, help resources, and customer service tools.
-						</Text>
-					</div>
-					<Icon name="chevron-right" tone="subdued" />
-				</a>
-			</div>
-		</Card>
+			<Card
+				title="Recovery attribution"
+				subtitle="When a customer comes back and buys later, how long do we still credit it to the alert?"
+			>
+				<div class="form-stack">
+					<Select
+						label="Attribution window"
+						name="attributionWindowDays"
+						options={attributionOptions}
+						value={attributionWindowDays}
+						helpText="Exact matches (same checkout) are always credited. This window only governs purchases made later from a new checkout by the same customer, shown separately as 'inferred' recoveries."
+						onchange={(e) => (attributionWindowDays = (e.target as HTMLSelectElement).value)}
+					/>
+				</div>
+			</Card>
 
-		<!-- Tools -->
-		<Card title="Tools">
-			<div class="tools-list">
-				<div class="tool-item">
-					<div class="tool-content">
-						<Text variant="headingSm">Reset app settings</Text>
-						<Text tone="subdued">
-							Reset all settings to their default values. This action cannot be undone.
-						</Text>
-					</div>
-					<Button tone="critical">Reset</Button>
+			<Card
+				title="Email alerts"
+				subtitle="Each address gets a code to confirm before alerts start."
+			>
+				<div class="form-stack">
+					<Switch
+						label="Email"
+						name="emailEnabled"
+						checked={emailEnabled}
+						onchange={(e) => (emailEnabled = (e.target as HTMLInputElement).checked)}
+					/>
+					<RecipientManager
+						channel="email"
+						inputType="email"
+						placeholder="you@store.com"
+						recipients={emailRecipients}
+						{authFetch}
+						onchange={loadRecipients}
+					/>
+					{#if emailEnabled && emailRecipients.filter((r) => r.verified).length === 0}
+						<p class="hint">Add and verify at least one address to receive email alerts.</p>
+					{/if}
 				</div>
-				<Divider spacing="tight" />
-				<div class="tool-item">
-					<div class="tool-content">
-						<Text variant="headingSm">Export settings</Text>
-						<Text tone="subdued">Download a backup of all your current settings.</Text>
-					</div>
-					<Button>Export</Button>
+			</Card>
+
+			<Card title="Slack alerts">
+				<div class="form-stack">
+					<Switch
+						label="Slack"
+						name="slackEnabled"
+						checked={slackEnabled}
+						onchange={(e) => (slackEnabled = (e.target as HTMLInputElement).checked)}
+					/>
+					<TextField
+						label="Incoming webhook URL"
+						name="slackWebhookUrl"
+						value={slackWebhookUrl}
+						placeholder="https://hooks.slack.com/services/…"
+						helpText="In Slack: Apps → Incoming Webhooks → Add to a channel, then paste the URL here."
+						oninput={(e) => (slackWebhookUrl = (e.target as HTMLInputElement).value)}
+					/>
 				</div>
-			</div>
-		</Card>
-	</Page>
-</form>
+			</Card>
+
+			<Card
+				title="SMS alerts"
+				subtitle="Each number gets a code by text to confirm before alerts start."
+			>
+				<div class="form-stack">
+					{#if !smsAvailable}
+						<Banner tone="info">
+							<p>
+								SMS alerts are available on paid plans. Email and Slack alerts are included free.
+							</p>
+						</Banner>
+					{/if}
+					<Switch
+						label="SMS"
+						name="smsEnabled"
+						checked={smsEnabled}
+						disabled={!smsAvailable}
+						onchange={(e) => (smsEnabled = (e.target as HTMLInputElement).checked)}
+					/>
+					<RecipientManager
+						channel="sms"
+						inputType="tel"
+						placeholder="+15551234567"
+						disabled={!smsAvailable}
+						recipients={smsRecipients}
+						{authFetch}
+						onchange={loadRecipients}
+					/>
+					{#if smsAvailable && smsEnabled && smsRecipients.filter((r) => r.verified).length === 0}
+						<p class="hint">Add and verify at least one number to receive SMS alerts.</p>
+					{/if}
+				</div>
+			</Card>
+
+			{#if alertLimit !== null}
+				<Banner tone={alertsUsed >= alertLimit ? 'warning' : 'info'} title="Free plan usage">
+					<p>
+						{alertsUsed} of {alertLimit} alerts used this period.
+						{#if alertsUsed >= alertLimit}
+							High-value carts are currently going unalerted — upgrade to keep alerts flowing.
+						{/if}
+					</p>
+				</Banner>
+			{/if}
+		</div>
+	{/if}
+</Page>
 
 <style>
+	.settings-stack,
+	.skeleton-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
 	.form-stack {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-400);
+		gap: 16px;
 	}
 
-	.checkbox-group {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-300);
+	.error-list {
+		margin: 0;
+		padding-left: 18px;
 	}
 
-	.nav-list {
-		margin: calc(-1 * var(--space-400));
-	}
-
-	.nav-item {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-400);
-		padding: var(--space-400);
-		text-decoration: none;
-		color: inherit;
-		transition: background-color var(--duration-fast) var(--ease-default);
-	}
-
-	.nav-item:hover {
-		background: var(--color-bg-surface-hover);
-	}
-
-	.nav-item-content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-100);
-	}
-
-	.tools-list {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.tool-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: var(--space-400);
-		padding: var(--space-200) 0;
-	}
-
-	.tool-content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-100);
+	.hint {
+		margin: 0;
+		font-size: 13px;
+		color: var(--p-color-text-secondary, #6d7175);
 	}
 </style>

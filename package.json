@@ -45,6 +45,7 @@
 		"vite-node": "^5.3.0"
 	},
 	"dependencies": {
+		"@aws-sdk/client-sesv2": "^3.1066.0",
 		"@shopify/admin-api-client": "^1.1.1",
 		"@shopify/shopify-api": "^12.2.0",
 		"drizzle-orm": "^0.45.1",

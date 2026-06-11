@@ -5,7 +5,18 @@
  * Run `pnpm run db:push` to apply schema changes
  * Run `pnpm run db:studio` to browse data
  */
-import { pgTable, text, boolean, timestamp } from 'drizzle-orm/pg-core';
+import {
+	pgTable,
+	text,
+	boolean,
+	timestamp,
+	integer,
+	numeric,
+	jsonb,
+	uuid,
+	index,
+	uniqueIndex
+} from 'drizzle-orm/pg-core';
 
 /**
  * Session table for Shopify OAuth session storage
@@ -47,3 +58,189 @@ export const session = pgTable('session', {
 	refreshToken: text('refresh_token'),
 	refreshTokenExpires: timestamp('refresh_token_expires', { mode: 'date' })
 });
+
+export type ShopPlan = 'free' | 'pro' | 'scale';
+
+export type CheckoutStatus =
+	| 'active' // checkout still being worked on (or below inactivity window)
+	| 'abandoned' // inactive past window + matched a rule, alert not yet sent
+	| 'alerted' // alert(s) sent, waiting to see if it recovers
+	| 'recovered' // order placed after we alerted
+	| 'completed'; // order placed without us ever alerting
+
+export type AlertChannel = 'email' | 'slack' | 'sms';
+export type AlertStatus = 'queued' | 'sent' | 'failed';
+
+/**
+ * How a recovery was attributed:
+ * - 'token': the order carried the same checkout_token (exact)
+ * - 'email' / 'phone': inferred — a later order from the same customer within
+ *   the attribution window, started as a fresh checkout (different token)
+ */
+export type RecoveryMatch = 'token' | 'email' | 'phone';
+
+export interface LineItemSnapshot {
+	title: string;
+	quantity: number;
+	price: string;
+	variantTitle: string | null;
+	sku: string | null;
+}
+
+/**
+ * One row per installed shop. Billing/plan state and the free-tier alert counter live here.
+ */
+export const shops = pgTable('shops', {
+	shop: text('shop').primaryKey(),
+	shopName: text('shop_name'),
+	currency: text('currency'),
+	// Days after an alert that a later order from the same customer still counts
+	// as an (inferred) recovery. Read live at order time — see markCheckoutOrdered.
+	attributionWindowDays: integer('attribution_window_days').default(14).notNull(),
+	plan: text('plan').$type<ShopPlan>().default('free').notNull(),
+	billingSubscriptionId: text('billing_subscription_id'),
+	usageLineItemId: text('usage_line_item_id'),
+	// Alert/SMS counters for the current 30-day period (lazily reset by the dispatcher)
+	alertsUsedThisPeriod: integer('alerts_used_this_period').default(0).notNull(),
+	smsUsedThisPeriod: integer('sms_used_this_period').default(0).notNull(),
+	// Domestic SMS consumed against the plan's included allowance this period
+	domesticSmsUsedThisPeriod: integer('domestic_sms_used_this_period').default(0).notNull(),
+	periodStartedAt: timestamp('period_started_at', { mode: 'date' }).defaultNow().notNull(),
+	installedAt: timestamp('installed_at', { mode: 'date' }).defaultNow().notNull(),
+	uninstalledAt: timestamp('uninstalled_at', { mode: 'date' })
+});
+
+/**
+ * Alert trigger rules. Free/Pro plans get one rule; Scale allows several.
+ * A checkout fires a rule when totalPrice >= thresholdAmount
+ * (or itemCount >= minItemCount, when set) after inactivityMinutes of no activity.
+ */
+export const alertRules = pgTable(
+	'alert_rules',
+	{
+		id: uuid('id').defaultRandom().primaryKey(),
+		shop: text('shop').notNull(),
+		enabled: boolean('enabled').default(true).notNull(),
+		thresholdAmount: numeric('threshold_amount', { precision: 12, scale: 2 }).notNull(),
+		minItemCount: integer('min_item_count'),
+		inactivityMinutes: integer('inactivity_minutes').default(60).notNull(),
+		createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull()
+	},
+	(t) => [index('alert_rules_shop_idx').on(t.shop)]
+);
+
+/**
+ * Per-shop notification channel configuration (one row per shop).
+ * Recipients live in `alertRecipients` so each can be verified independently.
+ */
+export const channelSettings = pgTable('channel_settings', {
+	shop: text('shop').primaryKey(),
+	emailEnabled: boolean('email_enabled').default(true).notNull(),
+	slackEnabled: boolean('slack_enabled').default(false).notNull(),
+	slackWebhookUrl: text('slack_webhook_url'),
+	smsEnabled: boolean('sms_enabled').default(false).notNull(),
+	updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull()
+});
+
+export type RecipientChannel = 'email' | 'sms';
+
+/**
+ * Alert recipients (email addresses and phone numbers), each verified by a
+ * one-time code before it can receive alerts. We never send to an unverified
+ * destination — this proves ownership and protects deliverability/compliance.
+ */
+export const alertRecipients = pgTable(
+	'alert_recipients',
+	{
+		id: uuid('id').defaultRandom().primaryKey(),
+		shop: text('shop').notNull(),
+		channel: text('channel').$type<RecipientChannel>().notNull(),
+		// Email address or E.164 phone number
+		destination: text('destination').notNull(),
+		verified: boolean('verified').default(false).notNull(),
+		// Current one-time verification code (cleared once verified)
+		verificationCode: text('verification_code'),
+		verificationSentAt: timestamp('verification_sent_at', { mode: 'date' }),
+		verificationExpiresAt: timestamp('verification_expires_at', { mode: 'date' }),
+		verificationAttempts: integer('verification_attempts').default(0).notNull(),
+		createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull()
+	},
+	(t) => [
+		uniqueIndex('alert_recipients_shop_channel_dest_idx').on(t.shop, t.channel, t.destination),
+		index('alert_recipients_shop_channel_idx').on(t.shop, t.channel)
+	]
+);
+
+/**
+ * Checkouts tracked from checkouts/create|update webhooks.
+ * Customer fields are PII — customers/redact must null them out.
+ */
+export const checkouts = pgTable(
+	'checkouts',
+	{
+		id: uuid('id').defaultRandom().primaryKey(),
+		shop: text('shop').notNull(),
+		checkoutToken: text('checkout_token').notNull(),
+		shopifyCheckoutId: text('shopify_checkout_id'),
+		abandonedCheckoutUrl: text('abandoned_checkout_url'),
+		totalPrice: numeric('total_price', { precision: 12, scale: 2 }).notNull(),
+		currency: text('currency').notNull(),
+		itemCount: integer('item_count').default(0).notNull(),
+		customerName: text('customer_name'),
+		customerEmail: text('customer_email'),
+		customerPhone: text('customer_phone'),
+		lineItems: jsonb('line_items').$type<LineItemSnapshot[]>().default([]).notNull(),
+		status: text('status').$type<CheckoutStatus>().default('active').notNull(),
+		checkoutCreatedAt: timestamp('checkout_created_at', { mode: 'date' }),
+		lastActivityAt: timestamp('last_activity_at', { mode: 'date' }).notNull(),
+		alertedAt: timestamp('alerted_at', { mode: 'date' }),
+		recoveredAt: timestamp('recovered_at', { mode: 'date' }),
+		recoveredOrderId: text('recovered_order_id'),
+		recoveredAmount: numeric('recovered_amount', { precision: 12, scale: 2 }),
+		recoveryMatch: text('recovery_match').$type<RecoveryMatch>(),
+		updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull()
+	},
+	(t) => [
+		uniqueIndex('checkouts_shop_token_idx').on(t.shop, t.checkoutToken),
+		index('checkouts_status_activity_idx').on(t.status, t.lastActivityAt),
+		index('checkouts_shop_status_idx').on(t.shop, t.status)
+	]
+);
+
+/**
+ * One row per alert delivery attempt, per channel.
+ */
+export const alerts = pgTable(
+	'alerts',
+	{
+		id: uuid('id').defaultRandom().primaryKey(),
+		shop: text('shop').notNull(),
+		checkoutId: uuid('checkout_id').references(() => checkouts.id, { onDelete: 'cascade' }),
+		channel: text('channel').$type<AlertChannel>().notNull(),
+		recipient: text('recipient'),
+		status: text('status').$type<AlertStatus>().default('queued').notNull(),
+		error: text('error'),
+		providerMessageId: text('provider_message_id'),
+		isTest: boolean('is_test').default(false).notNull(),
+		sentAt: timestamp('sent_at', { mode: 'date' }),
+		createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull()
+	},
+	(t) => [index('alerts_shop_created_idx').on(t.shop, t.createdAt)]
+);
+
+/**
+ * Audit trail for Shopify usage records (per-SMS charges beyond included volume).
+ */
+export const usageCharges = pgTable(
+	'usage_charges',
+	{
+		id: uuid('id').defaultRandom().primaryKey(),
+		shop: text('shop').notNull(),
+		alertId: uuid('alert_id'),
+		amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
+		idempotencyKey: text('idempotency_key').notNull(),
+		shopifyUsageRecordId: text('shopify_usage_record_id'),
+		createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull()
+	},
+	(t) => [uniqueIndex('usage_charges_idempotency_idx').on(t.idempotencyKey)]
+);

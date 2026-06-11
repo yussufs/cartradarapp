@@ -86,10 +86,10 @@ export function createAdmin(session: Session): AdminClient {
 
 	return {
 		session,
-		async graphql<TData = unknown, TVariables extends Record<string, unknown> = Record<string, unknown>>(
-			query: string,
-			options?: GraphQLOptions<TVariables>
-		): Promise<GraphQLResponse<TData>> {
+		async graphql<
+			TData = unknown,
+			TVariables extends Record<string, unknown> = Record<string, unknown>
+		>(query: string, options?: GraphQLOptions<TVariables>): Promise<GraphQLResponse<TData>> {
 			const response = await client.request<TData>(query, {
 				variables: options?.variables
 			});

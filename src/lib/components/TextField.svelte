@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import type { FullAutoFill } from 'svelte/elements';
 
 	interface Props {
 		label: string;
@@ -16,7 +17,7 @@
 		multiline?: boolean;
 		rows?: number;
 		maxLength?: number;
-		autoComplete?: string;
+		autoComplete?: FullAutoFill;
 		labelHidden?: boolean;
 		required?: boolean;
 		step?: string;

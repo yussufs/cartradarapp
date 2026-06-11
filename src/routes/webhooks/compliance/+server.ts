@@ -1,8 +1,17 @@
 import type { RequestHandler } from './$types';
 import { authenticateWebhook } from '$lib/server/shopify/webhooks';
 import { db } from '$lib/server/db';
-import { session as sessionTable } from '$lib/shared/db/schema';
-import { eq } from 'drizzle-orm';
+import {
+	session as sessionTable,
+	shops,
+	alertRules,
+	alertRecipients,
+	channelSettings,
+	checkouts,
+	alerts,
+	usageCharges
+} from '$lib/shared/db/schema';
+import { and, eq } from 'drizzle-orm';
 
 /**
  * Compliance webhook payloads
@@ -37,27 +46,40 @@ export const POST: RequestHandler = async ({ request }) => {
 		switch (topic) {
 			case 'customers/data_request': {
 				const p = payload as CustomerDataRequestPayload;
-				console.log(`Customer data request #${p.data_request.id} for shop ${shop}`);
-				console.log(`Customer ID: ${p.customer.id}, Email: ${p.customer.email}`);
-				// TODO: Query your database for any data associated with this customer
-				// and provide it to the store owner (via email, admin panel, etc.)
-				// You have 30 days to comply with this request
+				// We only hold checkout snapshots; log what we have so the request can be
+				// fulfilled manually within the 30-day window.
+				const rows = await db
+					.select({ id: checkouts.id, createdAt: checkouts.checkoutCreatedAt })
+					.from(checkouts)
+					.where(and(eq(checkouts.shop, shop), eq(checkouts.customerEmail, p.customer.email)));
+				console.log(
+					`Customer data request #${p.data_request.id} for ${shop}: ` +
+						`${rows.length} checkout snapshot(s) held for ${p.customer.email}`
+				);
 				break;
 			}
 
 			case 'customers/redact': {
 				const p = payload as CustomerRedactPayload;
-				console.log(`Customer redact request for shop ${shop}`);
-				console.log(`Customer ID: ${p.customer.id}, Email: ${p.customer.email}`);
-				// TODO: Delete or anonymize any personal data for this customer
-				console.log(`Deleted customer data for customer ${p.customer.id}`);
+				// Null out PII on checkout snapshots for this customer
+				await db
+					.update(checkouts)
+					.set({ customerName: null, customerEmail: null, customerPhone: null })
+					.where(and(eq(checkouts.shop, shop), eq(checkouts.customerEmail, p.customer.email)));
+				console.log(`Redacted checkout PII for customer ${p.customer.id} on ${shop}`);
 				break;
 			}
 
 			case 'shop/redact': {
 				console.log(`Shop redact request for ${shop} - deleting all shop data`);
+				await db.delete(alerts).where(eq(alerts.shop, shop));
+				await db.delete(checkouts).where(eq(checkouts.shop, shop));
+				await db.delete(usageCharges).where(eq(usageCharges.shop, shop));
+				await db.delete(alertRules).where(eq(alertRules.shop, shop));
+				await db.delete(alertRecipients).where(eq(alertRecipients.shop, shop));
+				await db.delete(channelSettings).where(eq(channelSettings.shop, shop));
+				await db.delete(shops).where(eq(shops.shop, shop));
 				await db.delete(sessionTable).where(eq(sessionTable.shop, shop));
-				// TODO: Delete from additional tables as your app grows
 				console.log(`Successfully deleted all data for shop ${shop}`);
 				break;
 			}

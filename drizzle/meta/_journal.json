@@ -8,6 +8,34 @@
 			"when": 1781152161824,
 			"tag": "0000_good_quentin_quire",
 			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "7",
+			"when": 1781154808120,
+			"tag": "0001_lazy_scorpion",
+			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "7",
+			"when": 1781156695596,
+			"tag": "0002_spicy_maddog",
+			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "7",
+			"when": 1781157490598,
+			"tag": "0003_bumpy_mentor",
+			"breakpoints": true
+		},
+		{
+			"idx": 4,
+			"version": "7",
+			"when": 1781158697054,
+			"tag": "0004_deep_wallow",
+			"breakpoints": true
 		}
 	]
 }

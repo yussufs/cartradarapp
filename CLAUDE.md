@@ -42,14 +42,18 @@ shopify app dev           # Start with Shopify CLI (recommended)
 The following MCP servers are configured for documentation lookup and development assistance:
 
 ### Svelte MCP
+
 Official Svelte MCP server for Svelte 5 and SvelteKit documentation:
+
 - **list-sections**: Discover available documentation sections. Use FIRST when asked about Svelte/SvelteKit topics.
 - **get-documentation**: Retrieve full documentation for specific sections.
 - **svelte-autofixer**: Analyze Svelte code for issues. Use when writing Svelte components.
 - **playground-link**: Generate Svelte Playground links (only when requested by user).
 
 ### Shopify Dev MCP
+
 Official Shopify MCP server for Shopify development:
+
 - **learn_shopify_api**: Initialize context for a specific Shopify API (Admin, Storefront, Functions, Polaris, Liquid, etc.)
 - **search_docs_chunks**: Search Shopify developer documentation
 - **fetch_full_docs**: Retrieve full documentation pages from shopify.dev
@@ -58,17 +62,22 @@ Official Shopify MCP server for Shopify development:
 - **validate_component_codeblocks**: Validate Polaris component usage (for Polaris-based projects)
 
 ### Context7 MCP
+
 Up-to-date documentation for any library:
+
 - **resolve-library-id**: Find the Context7 library ID for a package
 - **query-docs**: Retrieve documentation and code examples for any library
 
 ### Browser MCP
+
 Browser automation for testing and debugging:
+
 - **browser_navigate**, **browser_snapshot**, **browser_click**, etc.
 
 ## Shopify Questions
 
 Always use the `/shopify` skill for ANY question about:
+
 - Shopify APIs (Admin, Storefront, Partner, etc.)
 - GraphQL queries/mutations for Shopify
 - Liquid themes
@@ -85,7 +94,7 @@ Use the `#graphql` tag for type generation:
 
 ```typescript
 const response = await admin.graphql(
-  `#graphql
+	`#graphql
     query GetShop {
       shop { name }
     }
@@ -102,6 +111,7 @@ After adding new queries, run `pnpm run graphql-codegen`.
 Instead, use the async client-side pattern:
 
 ### 1. Page Server Load (`+page.server.ts`)
+
 Return minimal data - just validate auth and pass essential info:
 
 ```typescript
@@ -115,6 +125,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 ```
 
 ### 2. API Endpoint (`/api/[resource]/+server.ts`)
+
 Put GraphQL queries in API endpoints:
 
 ```typescript
@@ -131,6 +142,7 @@ export const GET: RequestHandler = async ({ request }) => {
 ```
 
 ### 3. Svelte Page (`+page.svelte`)
+
 Fetch data client-side with loading states:
 
 ```svelte
@@ -152,6 +164,7 @@ Fetch data client-side with loading states:
 ```
 
 ### Benefits
+
 - **Faster initial page load**: Page renders immediately with loading state
 - **Better UX**: Users see the page structure while data loads
 - **Reusable endpoints**: API routes can be used by multiple pages
@@ -197,6 +210,7 @@ browser cookies disabled before considering it done.
 This project uses custom Svelte components instead of Polaris web components. Build your own components styled to match Shopify admin aesthetics.
 
 **App Bridge web components** (the `s-` prefixed ones like `s-app-nav`) are still available for:
+
 - `s-app-nav` - App navigation menu
 - `s-app-window` - Fullscreen modal windows
 - `data-save-bar` attribute on forms - Automatic save bar integration
@@ -206,26 +220,26 @@ For all other UI (buttons, tables, forms, cards, etc.), create custom Svelte com
 
 Full documentation: [docs/CUSTOM_COMPONENTS.md](docs/CUSTOM_COMPONENTS.md)
 
-| Component | Description |
-|-----------|-------------|
-| `Page` | Main page container with header, actions, and aside layout |
-| `Card` | Content container with title, actions, and footer slots |
-| `Button` | Versatile button with variants, tones, and link support |
-| `TextField` | Text input with label, validation, prefix/suffix |
-| `Select` | Dropdown select input |
-| `Checkbox` | Checkbox input with label and help text |
-| `Switch` | Toggle switch for boolean settings |
-| `SearchField` | Search input with clear button |
-| `DataTable` | Table component with styling |
-| `Badge` | Status badge with color tones |
-| `Banner` | Alert/notification banner |
-| `Spinner` | Loading spinner |
-| `Skeleton` | Loading placeholder with shimmer animation |
-| `Text` | Typography component with variants |
-| `Link` | Styled link component |
-| `Divider` | Horizontal divider line |
-| `Icon` | SVG icon component |
-| `EmptyState` | Empty state placeholder |
+| Component     | Description                                                |
+| ------------- | ---------------------------------------------------------- |
+| `Page`        | Main page container with header, actions, and aside layout |
+| `Card`        | Content container with title, actions, and footer slots    |
+| `Button`      | Versatile button with variants, tones, and link support    |
+| `TextField`   | Text input with label, validation, prefix/suffix           |
+| `Select`      | Dropdown select input                                      |
+| `Checkbox`    | Checkbox input with label and help text                    |
+| `Switch`      | Toggle switch for boolean settings                         |
+| `SearchField` | Search input with clear button                             |
+| `DataTable`   | Table component with styling                               |
+| `Badge`       | Status badge with color tones                              |
+| `Banner`      | Alert/notification banner                                  |
+| `Spinner`     | Loading spinner                                            |
+| `Skeleton`    | Loading placeholder with shimmer animation                 |
+| `Text`        | Typography component with variants                         |
+| `Link`        | Styled link component                                      |
+| `Divider`     | Horizontal divider line                                    |
+| `Icon`        | SVG icon component                                         |
+| `EmptyState`  | Empty state placeholder                                    |
 
 ## Code Style (Prettier)
 

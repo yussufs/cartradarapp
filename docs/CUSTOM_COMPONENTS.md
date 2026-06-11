@@ -8,11 +8,11 @@ This project uses custom Svelte components styled to match Shopify admin aesthet
 
 The following App Bridge web components are available (loaded via `app-bridge.js`):
 
-| Component | Description |
-|-----------|-------------|
-| `s-app-nav` | App navigation menu |
-| `s-link` | Navigation links within app-nav |
-| `s-app-window` | Fullscreen modal windows |
+| Component       | Description                                       |
+| --------------- | ------------------------------------------------- |
+| `s-app-nav`     | App navigation menu                               |
+| `s-link`        | Navigation links within app-nav                   |
+| `s-app-window`  | Fullscreen modal windows                          |
 | `data-save-bar` | Form attribute for automatic save bar integration |
 
 For all other UI needs, use the custom Svelte components documented below.
@@ -56,15 +56,15 @@ Main page container with header, actions, and optional aside layout.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `title` | `string` | - | Page heading |
-| `subtitle` | `string` | - | Optional subheading |
-| `narrow` | `boolean` | `false` | Use narrower max-width |
-| `backAction` | `{ url: string, label?: string }` | - | Back navigation link |
-| `primaryAction` | `Snippet` | - | Primary action button slot |
-| `secondaryActions` | `Snippet` | - | Secondary actions slot |
-| `aside` | `Snippet` | - | Sidebar content slot |
+| Prop               | Type                              | Default | Description                |
+| ------------------ | --------------------------------- | ------- | -------------------------- |
+| `title`            | `string`                          | -       | Page heading               |
+| `subtitle`         | `string`                          | -       | Optional subheading        |
+| `narrow`           | `boolean`                         | `false` | Use narrower max-width     |
+| `backAction`       | `{ url: string, label?: string }` | -       | Back navigation link       |
+| `primaryAction`    | `Snippet`                         | -       | Primary action button slot |
+| `secondaryActions` | `Snippet`                         | -       | Secondary actions slot     |
+| `aside`            | `Snippet`                         | -       | Sidebar content slot       |
 
 #### Card
 
@@ -86,13 +86,13 @@ Content container with optional title, subtitle, and actions.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `title` | `string` | - | Card heading |
-| `subtitle` | `string` | - | Optional subheading |
-| `padding` | `'none' \| 'tight' \| 'base' \| 'loose'` | `'base'` | Body padding |
-| `actions` | `Snippet` | - | Header actions slot |
-| `footer` | `Snippet` | - | Footer content slot |
+| Prop       | Type                                     | Default  | Description         |
+| ---------- | ---------------------------------------- | -------- | ------------------- |
+| `title`    | `string`                                 | -        | Card heading        |
+| `subtitle` | `string`                                 | -        | Optional subheading |
+| `padding`  | `'none' \| 'tight' \| 'base' \| 'loose'` | `'base'` | Body padding        |
+| `actions`  | `Snippet`                                | -        | Header actions slot |
+| `footer`   | `Snippet`                                | -        | Footer content slot |
 
 ---
 
@@ -130,18 +130,18 @@ Versatile button component supporting multiple variants and states.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `variant` | `'primary' \| 'secondary' \| 'tertiary' \| 'plain'` | `'secondary'` | Visual style |
-| `tone` | `'default' \| 'critical' \| 'success'` | `'default'` | Color tone |
-| `size` | `'slim' \| 'medium' \| 'large'` | `'medium'` | Button size |
-| `fullWidth` | `boolean` | `false` | Full width button |
-| `loading` | `boolean` | `false` | Show loading spinner |
-| `disabled` | `boolean` | `false` | Disable button |
-| `iconOnly` | `boolean` | `false` | Icon-only button |
-| `icon` | `Snippet` | - | Icon slot |
-| `href` | `string` | - | Render as link |
-| `type` | `'button' \| 'submit' \| 'reset'` | `'button'` | Button type |
+| Prop        | Type                                                | Default       | Description          |
+| ----------- | --------------------------------------------------- | ------------- | -------------------- |
+| `variant`   | `'primary' \| 'secondary' \| 'tertiary' \| 'plain'` | `'secondary'` | Visual style         |
+| `tone`      | `'default' \| 'critical' \| 'success'`              | `'default'`   | Color tone           |
+| `size`      | `'slim' \| 'medium' \| 'large'`                     | `'medium'`    | Button size          |
+| `fullWidth` | `boolean`                                           | `false`       | Full width button    |
+| `loading`   | `boolean`                                           | `false`       | Show loading spinner |
+| `disabled`  | `boolean`                                           | `false`       | Disable button       |
+| `iconOnly`  | `boolean`                                           | `false`       | Icon-only button     |
+| `icon`      | `Snippet`                                           | -             | Icon slot            |
+| `href`      | `string`                                            | -             | Render as link       |
+| `type`      | `'button' \| 'submit' \| 'reset'`                   | `'button'`    | Button type          |
 
 #### TextField
 
@@ -167,21 +167,21 @@ Text input with label, validation, and prefix/suffix support.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `label` | `string` | - | Input label |
-| `name` | `string` | - | Input name |
-| `value` | `string` | `''` | Input value |
-| `type` | `string` | `'text'` | Input type |
-| `placeholder` | `string` | - | Placeholder text |
-| `disabled` | `boolean` | `false` | Disable input |
-| `error` | `string` | - | Error message |
-| `helpText` | `string` | - | Help text |
-| `prefix` | `string \| Snippet` | - | Input prefix |
-| `suffix` | `string \| Snippet` | - | Input suffix |
-| `multiline` | `boolean` | `false` | Textarea mode |
-| `rows` | `number` | `3` | Textarea rows |
-| `labelHidden` | `boolean` | `false` | Hide label visually |
+| Prop          | Type                | Default  | Description         |
+| ------------- | ------------------- | -------- | ------------------- |
+| `label`       | `string`            | -        | Input label         |
+| `name`        | `string`            | -        | Input name          |
+| `value`       | `string`            | `''`     | Input value         |
+| `type`        | `string`            | `'text'` | Input type          |
+| `placeholder` | `string`            | -        | Placeholder text    |
+| `disabled`    | `boolean`           | `false`  | Disable input       |
+| `error`       | `string`            | -        | Error message       |
+| `helpText`    | `string`            | -        | Help text           |
+| `prefix`      | `string \| Snippet` | -        | Input prefix        |
+| `suffix`      | `string \| Snippet` | -        | Input suffix        |
+| `multiline`   | `boolean`           | `false`  | Textarea mode       |
+| `rows`        | `number`            | `3`      | Textarea rows       |
+| `labelHidden` | `boolean`           | `false`  | Hide label visually |
 
 #### Select
 
@@ -203,16 +203,16 @@ Dropdown select input.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `label` | `string` | - | Select label |
-| `name` | `string` | - | Select name |
-| `options` | `{ value: string, label: string }[]` | - | Options array |
-| `value` | `string` | `''` | Selected value |
-| `placeholder` | `string` | `'Select an option'` | Placeholder |
-| `disabled` | `boolean` | `false` | Disable select |
-| `error` | `string` | - | Error message |
-| `helpText` | `string` | - | Help text |
+| Prop          | Type                                 | Default              | Description    |
+| ------------- | ------------------------------------ | -------------------- | -------------- |
+| `label`       | `string`                             | -                    | Select label   |
+| `name`        | `string`                             | -                    | Select name    |
+| `options`     | `{ value: string, label: string }[]` | -                    | Options array  |
+| `value`       | `string`                             | `''`                 | Selected value |
+| `placeholder` | `string`                             | `'Select an option'` | Placeholder    |
+| `disabled`    | `boolean`                            | `false`              | Disable select |
+| `error`       | `string`                             | -                    | Error message  |
+| `helpText`    | `string`                             | -                    | Help text      |
 
 #### Checkbox
 
@@ -229,15 +229,15 @@ Checkbox input with label and help text.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `label` | `string` | - | Checkbox label |
-| `name` | `string` | - | Checkbox name |
-| `checked` | `boolean` | `false` | Checked state |
-| `value` | `string` | `''` | Checkbox value |
+| Prop       | Type      | Default | Description      |
+| ---------- | --------- | ------- | ---------------- |
+| `label`    | `string`  | -       | Checkbox label   |
+| `name`     | `string`  | -       | Checkbox name    |
+| `checked`  | `boolean` | `false` | Checked state    |
+| `value`    | `string`  | `''`    | Checkbox value   |
 | `disabled` | `boolean` | `false` | Disable checkbox |
-| `helpText` | `string` | - | Help text |
-| `error` | `string` | - | Error message |
+| `helpText` | `string`  | -       | Help text        |
+| `error`    | `string`  | -       | Error message    |
 
 #### Switch
 
@@ -258,13 +258,13 @@ Toggle switch for boolean settings.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `label` | `string` | - | Switch label |
-| `name` | `string` | - | Switch name |
-| `checked` | `boolean` | `false` | Checked state |
+| Prop       | Type      | Default | Description    |
+| ---------- | --------- | ------- | -------------- |
+| `label`    | `string`  | -       | Switch label   |
+| `name`     | `string`  | -       | Switch name    |
+| `checked`  | `boolean` | `false` | Checked state  |
 | `disabled` | `boolean` | `false` | Disable switch |
-| `helpText` | `string` | - | Help text |
+| `helpText` | `string`  | -       | Help text      |
 
 #### SearchField
 
@@ -280,8 +280,8 @@ Search input with clear button.
 <SearchField
 	placeholder="Search products"
 	value={query}
-	oninput={(e) => query = e.target.value}
-	onclear={() => query = ''}
+	oninput={(e) => (query = e.target.value)}
+	onclear={() => (query = '')}
 />
 ```
 
@@ -323,10 +323,10 @@ Table component with styling and responsive support.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `hoverable` | `boolean` | `true` | Highlight rows on hover |
-| `striped` | `boolean` | `false` | Alternating row colors |
+| Prop        | Type      | Default | Description             |
+| ----------- | --------- | ------- | ----------------------- |
+| `hoverable` | `boolean` | `true`  | Highlight rows on hover |
+| `striped`   | `boolean` | `false` | Alternating row colors  |
 
 #### Badge
 
@@ -348,10 +348,10 @@ Status badge component.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `tone` | `'default' \| 'success' \| 'info' \| 'caution' \| 'warning' \| 'critical'` | `'default'` | Color tone |
-| `size` | `'small' \| 'medium'` | `'medium'` | Badge size |
+| Prop   | Type                                                                       | Default     | Description |
+| ------ | -------------------------------------------------------------------------- | ----------- | ----------- |
+| `tone` | `'default' \| 'success' \| 'info' \| 'caution' \| 'warning' \| 'critical'` | `'default'` | Color tone  |
+| `size` | `'small' \| 'medium'`                                                      | `'medium'`  | Badge size  |
 
 #### Banner
 
@@ -365,12 +365,7 @@ Alert/notification banner.
 </script>
 
 {#if visible}
-	<Banner
-		title="Important notice"
-		tone="info"
-		dismissible
-		ondismiss={() => visible = false}
-	>
+	<Banner title="Important notice" tone="info" dismissible ondismiss={() => (visible = false)}>
 		This is a notification message.
 	</Banner>
 {/if}
@@ -378,13 +373,13 @@ Alert/notification banner.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `title` | `string` | - | Banner heading |
-| `tone` | `'default' \| 'success' \| 'warning' \| 'critical' \| 'info'` | `'default'` | Color tone |
-| `dismissible` | `boolean` | `false` | Show dismiss button |
-| `ondismiss` | `() => void` | - | Dismiss callback |
-| `actions` | `Snippet` | - | Action buttons slot |
+| Prop          | Type                                                          | Default     | Description         |
+| ------------- | ------------------------------------------------------------- | ----------- | ------------------- |
+| `title`       | `string`                                                      | -           | Banner heading      |
+| `tone`        | `'default' \| 'success' \| 'warning' \| 'critical' \| 'info'` | `'default'` | Color tone          |
+| `dismissible` | `boolean`                                                     | `false`     | Show dismiss button |
+| `ondismiss`   | `() => void`                                                  | -           | Dismiss callback    |
+| `actions`     | `Snippet`                                                     | -           | Action buttons slot |
 
 #### Spinner
 
@@ -402,10 +397,10 @@ Loading spinner.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `size` | `'small' \| 'medium' \| 'large'` | `'medium'` | Spinner size |
-| `label` | `string` | `'Loading'` | Accessibility label |
+| Prop    | Type                             | Default     | Description         |
+| ------- | -------------------------------- | ----------- | ------------------- |
+| `size`  | `'small' \| 'medium' \| 'large'` | `'medium'`  | Spinner size        |
+| `label` | `string`                         | `'Loading'` | Accessibility label |
 
 #### Skeleton
 
@@ -424,11 +419,11 @@ Loading placeholder with shimmer animation.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
+| Prop      | Type                                     | Default  | Description   |
+| --------- | ---------------------------------------- | -------- | ------------- |
 | `variant` | `'text' \| 'box' \| 'badge' \| 'circle'` | `'text'` | Shape variant |
-| `width` | `string` | varies | Custom width |
-| `height` | `string` | varies | Custom height |
+| `width`   | `string`                                 | varies   | Custom width  |
+| `height`  | `string`                                 | varies   | Custom height |
 
 ---
 
@@ -452,14 +447,14 @@ Text component with variant and tone support.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `as` | `'span' \| 'p' \| 'div' \| 'label'` | `'span'` | HTML element |
-| `variant` | `'bodyMd' \| 'bodySm' \| 'bodyLg' \| 'headingXs' \| 'headingSm' \| 'headingMd' \| 'headingLg' \| 'headingXl'` | `'bodyMd'` | Text variant |
-| `tone` | `'default' \| 'subdued' \| 'success' \| 'critical' \| 'warning'` | `'default'` | Color tone |
-| `fontWeight` | `'regular' \| 'medium' \| 'semibold' \| 'bold'` | - | Font weight override |
-| `alignment` | `'start' \| 'center' \| 'end'` | - | Text alignment |
-| `truncate` | `boolean` | `false` | Truncate with ellipsis |
+| Prop         | Type                                                                                                          | Default     | Description            |
+| ------------ | ------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------- |
+| `as`         | `'span' \| 'p' \| 'div' \| 'label'`                                                                           | `'span'`    | HTML element           |
+| `variant`    | `'bodyMd' \| 'bodySm' \| 'bodyLg' \| 'headingXs' \| 'headingSm' \| 'headingMd' \| 'headingLg' \| 'headingXl'` | `'bodyMd'`  | Text variant           |
+| `tone`       | `'default' \| 'subdued' \| 'success' \| 'critical' \| 'warning'`                                              | `'default'` | Color tone             |
+| `fontWeight` | `'regular' \| 'medium' \| 'semibold' \| 'bold'`                                                               | -           | Font weight override   |
+| `alignment`  | `'start' \| 'center' \| 'end'`                                                                                | -           | Text alignment         |
+| `truncate`   | `boolean`                                                                                                     | `false`     | Truncate with ellipsis |
 
 #### Link
 
@@ -477,10 +472,10 @@ Styled link component.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `href` | `string` | - | Link URL |
-| `external` | `boolean` | `false` | Open in new tab |
+| Prop         | Type      | Default | Description        |
+| ------------ | --------- | ------- | ------------------ |
+| `href`       | `string`  | -       | Link URL           |
+| `external`   | `boolean` | `false` | Open in new tab    |
 | `monochrome` | `boolean` | `false` | Inherit text color |
 
 #### Divider
@@ -500,8 +495,8 @@ Horizontal divider line.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
+| Prop      | Type                                     | Default  | Description     |
+| --------- | ---------------------------------------- | -------- | --------------- |
 | `spacing` | `'none' \| 'tight' \| 'base' \| 'loose'` | `'base'` | Vertical margin |
 
 #### Icon
@@ -522,11 +517,11 @@ SVG icon component.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `name` | `string` | - | Icon name |
-| `size` | `'small' \| 'medium' \| 'large'` | `'medium'` | Icon size |
-| `tone` | `'default' \| 'subdued' \| 'success' \| 'critical' \| 'warning'` | `'default'` | Color tone |
+| Prop   | Type                                                             | Default     | Description |
+| ------ | ---------------------------------------------------------------- | ----------- | ----------- |
+| `name` | `string`                                                         | -           | Icon name   |
+| `size` | `'small' \| 'medium' \| 'large'`                                 | `'medium'`  | Icon size   |
+| `tone` | `'default' \| 'subdued' \| 'success' \| 'critical' \| 'warning'` | `'default'` | Color tone  |
 
 #### EmptyState
 
@@ -548,12 +543,12 @@ Empty state placeholder with image and actions.
 
 **Props:**
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `heading` | `string` | - | Empty state title |
-| `description` | `string` | - | Description text |
-| `image` | `string` | - | Illustration image URL |
-| `imageAlt` | `string` | `''` | Image alt text |
+| Prop          | Type     | Default | Description            |
+| ------------- | -------- | ------- | ---------------------- |
+| `heading`     | `string` | -       | Empty state title      |
+| `description` | `string` | -       | Description text       |
+| `image`       | `string` | -       | Illustration image URL |
+| `imageAlt`    | `string` | `''`    | Image alt text         |
 
 ---
 
@@ -562,6 +557,7 @@ Empty state placeholder with image and actions.
 The component library uses CSS custom properties defined in `src/lib/styles/shopify.css`, based on Shopify's Polaris design tokens.
 
 ### Background Colors
+
 - `--color-bg` - Page background
 - `--color-bg-surface` - Card/surface background
 - `--color-bg-surface-hover`, `--color-bg-surface-active`, `--color-bg-surface-selected`
@@ -569,11 +565,13 @@ The component library uses CSS custom properties defined in `src/lib/styles/shop
 - `--color-bg-surface-success`, `--color-bg-surface-info`, `--color-bg-surface-caution`, `--color-bg-surface-warning`, `--color-bg-surface-critical`
 
 ### Fill Colors
+
 - `--color-bg-fill` - Primary fill (white)
 - `--color-bg-fill-brand`, `--color-bg-fill-brand-hover` - Brand fills (dark)
 - `--color-bg-fill-success`, `--color-bg-fill-critical`, `--color-bg-fill-warning`, `--color-bg-fill-info`, `--color-bg-fill-caution`
 
 ### Text Colors
+
 - `--color-text` - Primary text
 - `--color-text-secondary` - Subdued text
 - `--color-text-disabled`, `--color-text-inverse`
@@ -581,40 +579,48 @@ The component library uses CSS custom properties defined in `src/lib/styles/shop
 - `--color-text-link`, `--color-text-link-hover`
 
 ### Border Colors
+
 - `--color-border` - Default border
 - `--color-border-hover`, `--color-border-focus`, `--color-border-disabled`
 - `--color-border-success`, `--color-border-critical`, `--color-border-warning`, `--color-border-caution`, `--color-border-info`
 
 ### Icon Colors
+
 - `--color-icon`, `--color-icon-hover`, `--color-icon-secondary`, `--color-icon-disabled`
 - `--color-icon-success`, `--color-icon-critical`, `--color-icon-warning`, `--color-icon-caution`, `--color-icon-info`
 
 ### Spacing Scale
+
 - `--space-0` (0) through `--space-3200` (8rem)
 - Common: `--space-100` (0.25rem), `--space-200` (0.5rem), `--space-300` (0.75rem), `--space-400` (1rem), `--space-600` (1.5rem)
 
 ### Typography
+
 - **Font sizes**: `--font-size-275` (0.6875rem) through `--font-size-1000` (2.5rem)
 - **Aliases**: `--font-size-xs`, `--font-size-sm`, `--font-size-md`, `--font-size-lg`, `--font-size-xl`, `--font-size-2xl`
 - **Weights**: `--font-weight-regular` (400), `--font-weight-medium` (500), `--font-weight-semibold` (600), `--font-weight-bold` (700)
 - **Line heights**: `--line-height-300` through `--line-height-1200`, plus `--line-height-tight`, `--line-height-normal`
 
 ### Border Radius
+
 - `--radius-0` through `--radius-full` (pill)
 - Aliases: `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`
 
 ### Shadows
+
 - `--shadow-100` through `--shadow-600`
 - `--shadow-card` (alias for `--shadow-200`)
 - `--shadow-button`, `--shadow-button-primary`, `--shadow-button-primary-hover`
 - Aliases: `--shadow-xs`, `--shadow-sm`, `--shadow-md`, `--shadow-lg`
 
 ### Motion
+
 - **Durations**: `--duration-50` through `--duration-500`
 - **Aliases**: `--duration-fast` (100ms), `--duration-base` (200ms), `--duration-slow` (300ms)
 - **Easing**: `--ease`, `--ease-in`, `--ease-out`, `--ease-in-out`, `--ease-linear`
 
 ### Z-Index
+
 - `--z-index-1` through `--z-index-5`
 - Aliases: `--z-sticky`, `--z-modal`, `--z-toast`
 
