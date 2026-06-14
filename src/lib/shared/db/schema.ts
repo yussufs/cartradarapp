@@ -144,9 +144,9 @@ export const channelSettings = pgTable('channel_settings', {
 export type RecipientChannel = 'email';
 
 /**
- * Alert recipients (email addresses), each verified by a one-time code before
- * it can receive alerts. We never send to an unverified address — this proves
- * ownership and protects deliverability.
+ * Alert recipients (email addresses), each confirmed via a one-time link before
+ * it can receive alerts. We never send to an unconfirmed address — clicking the
+ * link proves inbox control and protects deliverability.
  */
 export const alertRecipients = pgTable(
 	'alert_recipients',
@@ -157,7 +157,7 @@ export const alertRecipients = pgTable(
 		// Email address
 		destination: text('destination').notNull(),
 		verified: boolean('verified').default(false).notNull(),
-		// Current one-time verification code (cleared once verified)
+		// Current confirmation-link token (cleared once confirmed)
 		verificationCode: text('verification_code'),
 		verificationSentAt: timestamp('verification_sent_at', { mode: 'date' }),
 		verificationExpiresAt: timestamp('verification_expires_at', { mode: 'date' }),

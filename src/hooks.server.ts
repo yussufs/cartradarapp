@@ -33,7 +33,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 				const { session, admin } = await authenticateRequest(event.request, idToken || undefined);
 				event.locals.shopify = { session, admin };
 			} catch (err) {
-				console.error('Auth failed:', err);
+				// A stale/expired App Bridge session token is expected and self-healing:
+				// XHRs retry via the header below; document loads fall through and App
+				// Bridge re-bootstraps. Log it quietly so genuine auth failures stand out.
+				if (err instanceof Error && err.name === 'InvalidJwtError') {
+					console.warn(
+						`Stale session token (${authHeader ? 'XHR — will retry' : 'document — App Bridge will re-bootstrap'})`
+					);
+				} else {
+					console.error('Auth failed:', err);
+				}
 				// Only return 401 for XHR requests (with Authorization header)
 				// Document requests should fall through to render the page with App Bridge
 				if (authHeader) {

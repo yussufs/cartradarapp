@@ -5,36 +5,8 @@
 		{
 			"idx": 0,
 			"version": "7",
-			"when": 1781214774885,
-			"tag": "0000_chief_talkback",
-			"breakpoints": true
-		},
-		{
-			"idx": 1,
-			"version": "7",
-			"when": 1781222602574,
-			"tag": "0001_bouncy_baron_strucker",
-			"breakpoints": true
-		},
-		{
-			"idx": 2,
-			"version": "7",
-			"when": 1781413691530,
-			"tag": "0002_nappy_peter_parker",
-			"breakpoints": true
-		},
-		{
-			"idx": 3,
-			"version": "7",
-			"when": 1781416019029,
-			"tag": "0003_lowly_talos",
-			"breakpoints": true
-		},
-		{
-			"idx": 4,
-			"version": "7",
-			"when": 1781417300380,
-			"tag": "0004_ambitious_frightful_four",
+			"when": 1781428432771,
+			"tag": "0000_material_mimic",
 			"breakpoints": true
 		}
 	]

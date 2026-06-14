@@ -40,7 +40,7 @@ CREATE TABLE "channel_settings" (
 	"email_enabled" boolean DEFAULT true NOT NULL,
 	"slack_enabled" boolean DEFAULT false NOT NULL,
 	"slack_webhook_url" text,
-	"sms_enabled" boolean DEFAULT false NOT NULL,
+	"slack_channel_name" text,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -61,10 +61,14 @@ CREATE TABLE "checkouts" (
 	"checkout_created_at" timestamp,
 	"last_activity_at" timestamp NOT NULL,
 	"alerted_at" timestamp,
+	"alert_attempts" integer DEFAULT 0 NOT NULL,
 	"recovered_at" timestamp,
 	"recovered_order_id" text,
 	"recovered_amount" numeric(12, 2),
 	"recovery_match" text,
+	"draft_order_id" text,
+	"draft_order_name" text,
+	"draft_order_created_at" timestamp,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -95,21 +99,8 @@ CREATE TABLE "shops" (
 	"attribution_window_days" integer DEFAULT 14 NOT NULL,
 	"billing_active" boolean DEFAULT false NOT NULL,
 	"billing_subscription_id" text,
-	"usage_line_item_id" text,
 	"installed_at" timestamp DEFAULT now() NOT NULL,
 	"uninstalled_at" timestamp
-);
---> statement-breakpoint
-CREATE TABLE "usage_charges" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"shop" text NOT NULL,
-	"checkout_id" uuid,
-	"order_id" text,
-	"recovered_amount" numeric(12, 2),
-	"amount" numeric(10, 2) NOT NULL,
-	"idempotency_key" text NOT NULL,
-	"shopify_usage_record_id" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "alerts" ADD CONSTRAINT "alerts_checkout_id_checkouts_id_fk" FOREIGN KEY ("checkout_id") REFERENCES "public"."checkouts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -119,6 +110,4 @@ CREATE INDEX "alert_rules_shop_idx" ON "alert_rules" USING btree ("shop");--> st
 CREATE INDEX "alerts_shop_created_idx" ON "alerts" USING btree ("shop","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "checkouts_shop_token_idx" ON "checkouts" USING btree ("shop","checkout_token");--> statement-breakpoint
 CREATE INDEX "checkouts_status_activity_idx" ON "checkouts" USING btree ("status","last_activity_at");--> statement-breakpoint
-CREATE INDEX "checkouts_shop_status_idx" ON "checkouts" USING btree ("shop","status");--> statement-breakpoint
-CREATE UNIQUE INDEX "usage_charges_idempotency_idx" ON "usage_charges" USING btree ("idempotency_key");--> statement-breakpoint
-CREATE INDEX "usage_charges_shop_created_idx" ON "usage_charges" USING btree ("shop","created_at");
+CREATE INDEX "checkouts_shop_status_idx" ON "checkouts" USING btree ("shop","status");

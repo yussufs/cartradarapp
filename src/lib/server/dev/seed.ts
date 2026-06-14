@@ -162,7 +162,15 @@ export async function seedAbandonedCheckout(
 		const admin = createAdmin(await getOfflineSession(shop));
 		const realItems = await fetchStoreLineItems(admin);
 		if (realItems) {
-			lineItems = realItems;
+			// Add real products only until the cart clears the target value, so a
+			// large catalog doesn't produce an absurdly big cart.
+			lineItems = [];
+			let running = 0;
+			for (const item of realItems) {
+				lineItems.push(item);
+				running += parseFloat(item.price) * item.quantity;
+				if (running >= target) break;
+			}
 			usedRealProducts = true;
 		} else {
 			lineItems = [syntheticItem(target)];

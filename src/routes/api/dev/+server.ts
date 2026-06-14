@@ -49,7 +49,10 @@ export const POST: RequestHandler = async ({ request }) => {
 				total: body.total,
 				ageMinutes: body.ageMinutes
 			});
-			return json({ ok: true, ...result });
+			// Evaluate immediately so the cart is alerted (and dashboard-visible)
+			// without waiting for the next 60s scheduler tick.
+			const alerted = await evaluateAbandonedCheckouts();
+			return json({ ok: true, ...result, alerted });
 		}
 		case 'evaluate': {
 			const alerted = await evaluateAbandonedCheckouts();

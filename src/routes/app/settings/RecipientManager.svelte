@@ -29,63 +29,63 @@
 		onchange
 	}: Props = $props();
 
+	// Local working copy so add/delete reflect instantly (optimistic), then
+	// reconcile with the server list whenever the parent reloads.
+	let items = $state<RecipientView[]>([]);
+	$effect(() => {
+		items = recipients;
+	});
+
+	// While any address is still pending, poll so it flips to Confirmed shortly
+	// after the recipient clicks the link (which happens in their own inbox/tab).
+	$effect(() => {
+		if (!items.some((r) => !r.verified)) return;
+		const timer = setInterval(() => onchange(), 4000);
+		return () => clearInterval(timer);
+	});
+
 	let newDestination = $state('');
 	let adding = $state(false);
 	let addError = $state('');
 
-	// Per-recipient UI state, keyed by recipient id
-	let codeInputs = $state<Record<string, string>>({});
 	let rowBusy = $state<Record<string, boolean>>({});
 	let rowError = $state<Record<string, string>>({});
 	let rowNotice = $state<Record<string, string>>({});
 
 	async function add() {
-		if (!newDestination.trim()) return;
+		const dest = newDestination.trim();
+		if (!dest) return;
 		adding = true;
 		addError = '';
+
+		// Optimistic: show the pending row immediately.
+		const tempId = `temp-${dest}`;
+		items = [
+			...items,
+			{ id: tempId, channel, destination: dest, verified: false, canResend: false }
+		];
+		newDestination = '';
+
 		try {
 			const response = await authFetch('/api/recipients', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ channel, destination: newDestination })
+				body: JSON.stringify({ channel, destination: dest })
 			});
 			const data = await response.json();
 			if (!response.ok) {
+				items = items.filter((i) => i.id !== tempId);
+				newDestination = dest;
 				addError = data.error ?? 'Could not add that recipient.';
 				return;
 			}
-			newDestination = '';
-			await onchange();
+			await onchange(); // reload replaces the temp row with the real one
 		} catch {
+			items = items.filter((i) => i.id !== tempId);
+			newDestination = dest;
 			addError = 'Could not add that recipient.';
 		} finally {
 			adding = false;
-		}
-	}
-
-	async function verify(id: string) {
-		const code = (codeInputs[id] ?? '').trim();
-		if (!code) return;
-		rowBusy[id] = true;
-		rowError[id] = '';
-		rowNotice[id] = '';
-		try {
-			const response = await authFetch(`/api/recipients/${id}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ code })
-			});
-			const data = await response.json();
-			if (!response.ok) {
-				rowError[id] = data.error ?? 'Verification failed.';
-				return;
-			}
-			codeInputs[id] = '';
-			await onchange();
-		} catch {
-			rowError[id] = 'Verification failed.';
-		} finally {
-			rowBusy[id] = false;
 		}
 	}
 
@@ -97,23 +97,32 @@
 			const response = await authFetch(`/api/recipients/${id}`, { method: 'POST' });
 			const data = await response.json();
 			if (!response.ok) {
-				rowError[id] = data.error ?? 'Could not resend the code.';
+				rowError[id] = data.error ?? 'Could not resend the link.';
 				return;
 			}
-			rowNotice[id] = 'A new code is on its way.';
+			rowNotice[id] = 'A fresh confirmation link is on its way.';
 			await onchange();
 		} catch {
-			rowError[id] = 'Could not resend the code.';
+			rowError[id] = 'Could not resend the link.';
 		} finally {
 			rowBusy[id] = false;
 		}
 	}
 
 	async function remove(id: string) {
+		// Optimistic: drop the row immediately, restore on failure.
+		const prev = items;
+		items = items.filter((i) => i.id !== id);
 		rowBusy[id] = true;
 		try {
-			await authFetch(`/api/recipients/${id}`, { method: 'DELETE' });
+			const response = await authFetch(`/api/recipients/${id}`, { method: 'DELETE' });
+			if (!response.ok) {
+				items = prev;
+				return;
+			}
 			await onchange();
+		} catch {
+			items = prev;
 		} finally {
 			rowBusy[id] = false;
 		}
@@ -148,14 +157,14 @@
 		<p class="field-error">{addError}</p>
 	{/if}
 
-	{#if recipients.length > 0}
+	{#if items.length > 0}
 		<ul class="recipient-list">
-			{#each recipients as recipient (recipient.id)}
+			{#each items as recipient (recipient.id)}
 				<li class="recipient-row">
 					<div class="recipient-head">
 						<span class="destination">{recipient.destination}</span>
 						{#if recipient.verified}
-							<Badge tone="success">Verified</Badge>
+							<Badge tone="success">Confirmed</Badge>
 						{:else}
 							<Badge tone="caution">Pending</Badge>
 						{/if}
@@ -171,29 +180,16 @@
 					</div>
 
 					{#if !recipient.verified}
-						<div class="verify-row">
-							<input
-								class="code-input"
-								inputmode="numeric"
-								maxlength="6"
-								placeholder="6-digit code"
-								aria-label="Verification code for {recipient.destination}"
-								value={codeInputs[recipient.id] ?? ''}
-								oninput={(e) => (codeInputs[recipient.id] = (e.target as HTMLInputElement).value)}
-							/>
-							<Button
-								variant="primary"
-								onclick={() => verify(recipient.id)}
-								loading={rowBusy[recipient.id]}
-							>
-								Verify
-							</Button>
+						<div class="pending-row">
+							<span class="pending-hint">
+								Confirmation link sent — they click it to start receiving alerts.
+							</span>
 							<Button
 								variant="plain"
 								disabled={!recipient.canResend || rowBusy[recipient.id]}
 								onclick={() => resend(recipient.id)}
 							>
-								Resend code
+								Resend link
 							</Button>
 						</div>
 						{#if rowError[recipient.id]}
@@ -274,20 +270,17 @@
 		color: var(--p-color-text-critical, #d72c0d);
 	}
 
-	.verify-row {
+	.pending-row {
 		display: flex;
 		gap: 8px;
 		align-items: center;
 		flex-wrap: wrap;
+		justify-content: space-between;
 	}
 
-	.code-input {
-		width: 120px;
-		padding: 6px 10px;
-		border: 1px solid var(--p-color-border, #c9cccf);
-		border-radius: 8px;
-		font-size: 14px;
-		letter-spacing: 2px;
+	.pending-hint {
+		font-size: 13px;
+		color: var(--p-color-text-secondary, #6d7175);
 	}
 
 	.field-error {

@@ -328,7 +328,7 @@
 
 			<Card
 				title="Email alerts"
-				subtitle="Each address gets a code to confirm before alerts start."
+				subtitle="Each address gets a confirmation link by email — they click it to start receiving alerts."
 			>
 				<div class="form-stack">
 					<Switch
@@ -346,7 +346,7 @@
 						onchange={loadRecipients}
 					/>
 					{#if emailEnabled && emailRecipients.filter((r) => r.verified).length === 0}
-						<p class="hint">Add and verify at least one address to receive email alerts.</p>
+						<p class="hint">Add and confirm at least one address to receive email alerts.</p>
 					{/if}
 				</div>
 			</Card>

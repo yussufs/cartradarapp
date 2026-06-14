@@ -1,5 +1,5 @@
 {
-	"id": "feb0678f-2cd3-4024-840f-3aeb133b3f1a",
+	"id": "23483333-8e01-4132-ac2f-116164cd8d56",
 	"prevId": "00000000-0000-0000-0000-000000000000",
 	"version": "7",
 	"dialect": "postgresql",
@@ -350,12 +350,11 @@
 					"primaryKey": false,
 					"notNull": false
 				},
-				"sms_enabled": {
-					"name": "sms_enabled",
-					"type": "boolean",
+				"slack_channel_name": {
+					"name": "slack_channel_name",
+					"type": "text",
 					"primaryKey": false,
-					"notNull": true,
-					"default": false
+					"notNull": false
 				},
 				"updated_at": {
 					"name": "updated_at",
@@ -477,6 +476,13 @@
 					"primaryKey": false,
 					"notNull": false
 				},
+				"alert_attempts": {
+					"name": "alert_attempts",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"default": 0
+				},
 				"recovered_at": {
 					"name": "recovered_at",
 					"type": "timestamp",
@@ -498,6 +504,24 @@
 				"recovery_match": {
 					"name": "recovery_match",
 					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"draft_order_id": {
+					"name": "draft_order_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"draft_order_name": {
+					"name": "draft_order_name",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"draft_order_created_at": {
+					"name": "draft_order_created_at",
+					"type": "timestamp",
 					"primaryKey": false,
 					"notNull": false
 				},
@@ -742,12 +766,6 @@
 					"primaryKey": false,
 					"notNull": false
 				},
-				"usage_line_item_id": {
-					"name": "usage_line_item_id",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": false
-				},
 				"installed_at": {
 					"name": "installed_at",
 					"type": "timestamp",
@@ -763,112 +781,6 @@
 				}
 			},
 			"indexes": {},
-			"foreignKeys": {},
-			"compositePrimaryKeys": {},
-			"uniqueConstraints": {},
-			"policies": {},
-			"checkConstraints": {},
-			"isRLSEnabled": false
-		},
-		"public.usage_charges": {
-			"name": "usage_charges",
-			"schema": "",
-			"columns": {
-				"id": {
-					"name": "id",
-					"type": "uuid",
-					"primaryKey": true,
-					"notNull": true,
-					"default": "gen_random_uuid()"
-				},
-				"shop": {
-					"name": "shop",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": true
-				},
-				"checkout_id": {
-					"name": "checkout_id",
-					"type": "uuid",
-					"primaryKey": false,
-					"notNull": false
-				},
-				"order_id": {
-					"name": "order_id",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": false
-				},
-				"recovered_amount": {
-					"name": "recovered_amount",
-					"type": "numeric(12, 2)",
-					"primaryKey": false,
-					"notNull": false
-				},
-				"amount": {
-					"name": "amount",
-					"type": "numeric(10, 2)",
-					"primaryKey": false,
-					"notNull": true
-				},
-				"idempotency_key": {
-					"name": "idempotency_key",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": true
-				},
-				"shopify_usage_record_id": {
-					"name": "shopify_usage_record_id",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": false
-				},
-				"created_at": {
-					"name": "created_at",
-					"type": "timestamp",
-					"primaryKey": false,
-					"notNull": true,
-					"default": "now()"
-				}
-			},
-			"indexes": {
-				"usage_charges_idempotency_idx": {
-					"name": "usage_charges_idempotency_idx",
-					"columns": [
-						{
-							"expression": "idempotency_key",
-							"isExpression": false,
-							"asc": true,
-							"nulls": "last"
-						}
-					],
-					"isUnique": true,
-					"concurrently": false,
-					"method": "btree",
-					"with": {}
-				},
-				"usage_charges_shop_created_idx": {
-					"name": "usage_charges_shop_created_idx",
-					"columns": [
-						{
-							"expression": "shop",
-							"isExpression": false,
-							"asc": true,
-							"nulls": "last"
-						},
-						{
-							"expression": "created_at",
-							"isExpression": false,
-							"asc": true,
-							"nulls": "last"
-						}
-					],
-					"isUnique": false,
-					"concurrently": false,
-					"method": "btree",
-					"with": {}
-				}
-			},
 			"foreignKeys": {},
 			"compositePrimaryKeys": {},
 			"uniqueConstraints": {},

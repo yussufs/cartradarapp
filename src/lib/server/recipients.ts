@@ -1,26 +1,27 @@
 /**
- * Alert recipient management: add an email address, send it a one-time
- * verification code, confirm the code, and look up verified destinations.
+ * Alert recipient management: add an email address, send it a confirmation
+ * LINK, and verify when the recipient clicks it. A link (rather than a typed
+ * code) works for shared/staff inboxes the merchant can't read a code out of.
  *
- * Nothing is ever sent to an unverified address — this proves the merchant
- * owns it (and protects deliverability).
+ * Nothing is ever sent to an unconfirmed address — clicking the link proves the
+ * recipient controls the inbox and protects deliverability.
  */
 import crypto from 'crypto';
 import { and, asc, eq } from 'drizzle-orm';
+import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { alertRecipients, type RecipientChannel } from '$lib/shared/db/schema';
 import { ensureShopRow } from '$lib/server/checkouts';
 import { isEmailConfigured, sendEmail } from '$lib/server/alerts/channels';
 
-const CODE_TTL_MS = 15 * 60 * 1000; // codes expire after 15 minutes
-const RESEND_COOLDOWN_MS = 30 * 1000; // at most one code every 30 seconds
-const MAX_ATTEMPTS = 5; // wrong-code attempts before a resend is required
+const LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // confirmation links are valid 7 days
+const RESEND_COOLDOWN_MS = 30 * 1000; // at most one link every 30 seconds
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type RecipientRow = typeof alertRecipients.$inferSelect;
 
-/** Public shape — never leaks the verification code. */
+/** Public shape — never leaks the verification token. */
 export interface RecipientView {
 	id: string;
 	channel: RecipientChannel;
@@ -39,8 +40,14 @@ export class RecipientError extends Error {
 	}
 }
 
-function generateCode(): string {
-	return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+function generateToken(): string {
+	return crypto.randomBytes(32).toString('base64url');
+}
+
+function appBaseUrl(): string {
+	const url = env.SHOPIFY_APP_URL || env.HOST;
+	if (!url) throw new RecipientError('App URL is not configured on the server', 500);
+	return url.replace(/\/+$/, '');
 }
 
 function canResend(row: Pick<RecipientRow, 'verificationSentAt'>): boolean {
@@ -64,18 +71,22 @@ function normalize(raw: string): string {
 	return lowered;
 }
 
-async function sendVerificationCode(destination: string, code: string): Promise<void> {
+async function sendVerificationLink(destination: string, token: string): Promise<void> {
 	if (!isEmailConfigured()) {
 		throw new RecipientError('Email sending is not configured on the server yet', 503);
 	}
+	const link = `${appBaseUrl()}/auth/recipient/verify?token=${token}`;
 	await sendEmail([destination], {
-		subject: `Your Cart Radar verification code is ${code}`,
-		text: `Your Cart Radar verification code is ${code}. It expires in 15 minutes.`,
+		subject: 'Confirm your email for Cart Radar alerts',
+		text:
+			`Confirm this address to start receiving Cart Radar cart alerts:\n${link}\n\n` +
+			`This link expires in 7 days. If you didn't expect this, you can ignore this email.`,
 		html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:24px;">
-			<p style="font-size:14px;color:#6d7175;margin:0 0 8px;">Cart Radar verification</p>
-			<p style="margin:0 0 16px;">Use this code to confirm <strong>${destination}</strong> for cart alerts:</p>
-			<p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:0;">${code}</p>
-			<p style="font-size:13px;color:#6d7175;margin:16px 0 0;">This code expires in 15 minutes. If you didn't request it, you can ignore this email.</p>
+			<p style="font-size:14px;color:#6d7175;margin:0 0 8px;">Cart Radar</p>
+			<p style="margin:0 0 16px;">Confirm <strong>${destination}</strong> to start receiving high-value cart alerts:</p>
+			<p style="margin:0 0 20px;"><a href="${link}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;">Confirm email</a></p>
+			<p style="font-size:13px;color:#6d7175;margin:0;">Or paste this link into your browser:<br>${link}</p>
+			<p style="font-size:13px;color:#6d7175;margin:16px 0 0;">This link expires in 7 days. If you didn't expect this, you can ignore this email.</p>
 		</div>`
 	});
 }
@@ -115,8 +126,8 @@ export async function hasVerifiedRecipient(
 }
 
 /**
- * Adds a recipient (or re-sends a code to an existing unverified one) and
- * dispatches a fresh verification code.
+ * Adds a recipient (or re-sends a link to an existing unconfirmed one) and
+ * dispatches a fresh confirmation link.
  */
 export async function addRecipient(
 	shop: string,
@@ -139,23 +150,23 @@ export async function addRecipient(
 		.limit(1);
 
 	if (existing?.verified) {
-		throw new RecipientError('That address is already verified', 409);
+		throw new RecipientError('That address is already confirmed', 409);
 	}
 	if (existing && !canResend(existing)) {
-		throw new RecipientError('Please wait a moment before requesting another code', 429);
+		throw new RecipientError('Please wait a moment before requesting another link', 429);
 	}
 
-	const code = generateCode();
+	const token = generateToken();
 	const now = new Date();
 	const fields = {
-		verificationCode: code,
+		verificationCode: token,
 		verificationSentAt: now,
-		verificationExpiresAt: new Date(now.getTime() + CODE_TTL_MS),
+		verificationExpiresAt: new Date(now.getTime() + LINK_TTL_MS),
 		verificationAttempts: 0
 	};
 
-	// Send before persisting so a send failure doesn't leave a dangling code
-	await sendVerificationCode(destination, code);
+	// Send before persisting so a send failure doesn't leave a dangling token
+	await sendVerificationLink(destination, token);
 
 	if (existing) {
 		const [updated] = await db
@@ -173,55 +184,38 @@ export async function addRecipient(
 	return toView(created);
 }
 
-export async function resendCode(shop: string, id: string): Promise<RecipientView> {
+export async function resendVerification(shop: string, id: string): Promise<RecipientView> {
 	const [row] = await db
 		.select()
 		.from(alertRecipients)
 		.where(and(eq(alertRecipients.id, id), eq(alertRecipients.shop, shop)))
 		.limit(1);
 	if (!row) throw new RecipientError('Recipient not found', 404);
-	if (row.verified) throw new RecipientError('That recipient is already verified', 409);
+	if (row.verified) throw new RecipientError('That recipient is already confirmed', 409);
 	if (!canResend(row)) {
-		throw new RecipientError('Please wait a moment before requesting another code', 429);
+		throw new RecipientError('Please wait a moment before requesting another link', 429);
 	}
 	return addRecipient(shop, row.channel, row.destination);
 }
 
-export async function verifyRecipient(
-	shop: string,
-	id: string,
-	code: string
-): Promise<RecipientView> {
+/**
+ * Confirms a recipient from the token in its emailed link. Returns the confirmed
+ * recipient, or null if the token is unknown/expired (or already used). Public:
+ * the token is the only secret, so no shop/session context is needed.
+ */
+export async function verifyByToken(token: string): Promise<RecipientView | null> {
+	if (!token) return null;
+
 	const [row] = await db
 		.select()
 		.from(alertRecipients)
-		.where(and(eq(alertRecipients.id, id), eq(alertRecipients.shop, shop)))
+		.where(eq(alertRecipients.verificationCode, token))
 		.limit(1);
-	if (!row) throw new RecipientError('Recipient not found', 404);
+	if (!row) return null;
 	if (row.verified) return toView(row);
 
-	if (!row.verificationCode || !row.verificationExpiresAt) {
-		throw new RecipientError('Request a new verification code', 410);
-	}
-	if (Date.now() > row.verificationExpiresAt.getTime()) {
-		throw new RecipientError('That code has expired — request a new one', 410);
-	}
-	if (row.verificationAttempts >= MAX_ATTEMPTS) {
-		throw new RecipientError('Too many attempts — request a new code', 429);
-	}
-
-	const submitted = code.trim();
-	// Constant-time compare to avoid leaking the code via timing
-	const matches =
-		submitted.length === row.verificationCode.length &&
-		crypto.timingSafeEqual(Buffer.from(submitted), Buffer.from(row.verificationCode));
-
-	if (!matches) {
-		await db
-			.update(alertRecipients)
-			.set({ verificationAttempts: row.verificationAttempts + 1 })
-			.where(eq(alertRecipients.id, row.id));
-		throw new RecipientError('That code is incorrect', 422);
+	if (!row.verificationExpiresAt || Date.now() > row.verificationExpiresAt.getTime()) {
+		return null;
 	}
 
 	const [verified] = await db

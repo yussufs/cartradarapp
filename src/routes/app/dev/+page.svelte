@@ -54,7 +54,7 @@
 			? 'real products'
 			: 'synthetic item — grant read_products + re-auth for real ones';
 		log(
-			`🛒 Seeded $${data.total} cart · ${data.itemCount} item(s) · ${source} · ${data.id.slice(0, 8)}`
+			`🛒 Seeded $${data.total} cart · ${data.itemCount} item(s) · ${source} · alerted ✓ — reload the dashboard to see it · ${data.id.slice(0, 8)}`
 		);
 	}
 
