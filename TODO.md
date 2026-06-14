@@ -19,6 +19,11 @@
   external scheduler (Railway cron / Upstash QStash / GitHub Actions) and stop the in-process loop.
 - For durable retries/backoff/scheduled jobs at scale: migrate to `pg-boss` (job queue on the existing
   Postgres — no new infra).
+- **Billing reconcile sweep:** add a periodic job that runs `syncBillingState()` across shops to catch
+  missed `app_subscriptions/update` webhooks (e.g. a `FROZEN`/`EXPIRED` we never received). Today billing
+  status only reconciles via the webhook + on each billing-page load, so a missed webhook can leave
+  `shops.billingActive` stale until the merchant next opens billing. (The cancel→grace→Free transition is
+  immune — it's computed live from `proAccessUntil` — this only affects the Shopify-status mirror.)
 
 ## Features Post Launch
 
@@ -27,9 +32,10 @@
 
 ## My TODOs to Check
 
-- High value cart alerts in settings should be enabled by default
-- Should double check if sub retains expiring upon moving back to 'free' (downgrading). Also how does expiry / resetting back to free work?
-- Adding / deleting emails should update instantly (without clicking save)
+- [DONE] Downgrade behaviour — implemented period-end grace: cancel stops Shopify renewal but keeps Pro
+  until `currentPeriodEnd` (via `shops.proAccessUntil`), then auto-falls to Free. Covers both the in-app
+  cancel and Shopify-admin cancel (webhook reads `currentPeriodEnd`). See "Billing reconcile sweep" above
+  for the remaining missed-webhook gap.
 - App Icon (For Slack + Shopify App)
 
 ## Post Launch Testing

@@ -78,20 +78,28 @@ export async function activateBilling(shop: string): Promise<string> {
 	return data.appSubscriptionCreate.confirmationUrl;
 }
 
-/** Cancels the active subscription (merchant downgrades to Free). */
-export async function cancelSubscription(shop: string): Promise<void> {
+/**
+ * Cancels the subscription. Shopify cancels immediately (CANCELLED is terminal),
+ * but the merchant already paid through currentPeriodEnd, so we keep them on Pro
+ * until then (period-end grace) and only fall to Free once it passes. Returns the
+ * grace end date, or null if there was nothing to cancel.
+ */
+export async function cancelSubscription(shop: string): Promise<Date | null> {
 	const [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
-	if (!shopRow?.billingSubscriptionId) return;
+	if (!shopRow?.billingSubscriptionId) return null;
 
 	const admin = await getOfflineAdmin(shop);
 	const response = await admin.graphql<{
-		appSubscriptionCancel: { userErrors: UserError[] };
+		appSubscriptionCancel: {
+			userErrors: UserError[];
+			appSubscription: { id: string; status: string; currentPeriodEnd: string | null } | null;
+		};
 	}>(
 		`#graphql
 		mutation CartRadarBillingCancel($id: ID!) {
 			appSubscriptionCancel(id: $id) {
 				userErrors { field message }
-				appSubscription { id status }
+				appSubscription { id status currentPeriodEnd }
 			}
 		}`,
 		{ variables: { id: shopRow.billingSubscriptionId } }
@@ -99,7 +107,60 @@ export async function cancelSubscription(shop: string): Promise<void> {
 
 	const data = throwOnErrors(response);
 	throwOnUserErrors(data.appSubscriptionCancel.userErrors, 'appSubscriptionCancel');
-	// The app_subscriptions/update webhook flips billingActive off
+
+	// `prorate` defaults to false, so no refund — the merchant keeps Pro through
+	// the period they paid for. Shopify's sub is now terminal, so we drop
+	// billingActive but grant grace locally until currentPeriodEnd.
+	const periodEnd = data.appSubscriptionCancel.appSubscription?.currentPeriodEnd ?? null;
+	const proAccessUntil = periodEnd ? new Date(periodEnd) : null;
+	await db
+		.update(shops)
+		.set({ billingActive: false, billingSubscriptionId: null, proAccessUntil })
+		.where(eq(shops.shop, shop));
+	return proAccessUntil;
+}
+
+/**
+ * Records a cancellation that we learn about from the app_subscriptions/update
+ * webhook (covers cancels done directly in Shopify admin, not just our own
+ * button): drop the active flag but keep Pro until the paid period ends by
+ * reading the subscription's currentPeriodEnd. If we can't read it, we leave any
+ * existing grace untouched rather than wiping it.
+ */
+export async function recordCancellation(
+	shop: string,
+	subscriptionId: string | null
+): Promise<void> {
+	let proAccessUntil: Date | null | undefined;
+	if (subscriptionId) {
+		try {
+			const admin = await getOfflineAdmin(shop);
+			const response = await admin.graphql<{ node: { currentPeriodEnd: string | null } | null }>(
+				`#graphql
+				query CartRadarSubscriptionPeriodEnd($id: ID!) {
+					node(id: $id) {
+						... on AppSubscription {
+							currentPeriodEnd
+						}
+					}
+				}`,
+				{ variables: { id: subscriptionId } }
+			);
+			const data = throwOnErrors(response);
+			const end = data.node?.currentPeriodEnd ?? null;
+			proAccessUntil = end ? new Date(end) : null;
+		} catch (err) {
+			console.error(`Could not read subscription period end for ${shop}:`, err);
+		}
+	}
+
+	const updates: {
+		billingActive: false;
+		billingSubscriptionId: null;
+		proAccessUntil?: Date | null;
+	} = { billingActive: false, billingSubscriptionId: null };
+	if (proAccessUntil !== undefined) updates.proAccessUntil = proAccessUntil;
+	await db.update(shops).set(updates).where(eq(shops.shop, shop));
 }
 
 /**
@@ -140,9 +201,10 @@ export async function syncBillingState(shop: string): Promise<boolean> {
 		return false;
 	}
 
+	// Active subscription → clear any leftover cancel-grace (they're paying again).
 	await db
 		.update(shops)
-		.set({ billingActive: true, billingSubscriptionId: subscription.id })
+		.set({ billingActive: true, billingSubscriptionId: subscription.id, proAccessUntil: null })
 		.where(eq(shops.shop, shop));
 	return true;
 }
@@ -155,6 +217,10 @@ export interface PlanState {
 	limit: number | null;
 	/** True when a Free shop has used its full monthly allowance. */
 	limitReached: boolean;
+	/** True only while a paying subscription is active (not during cancel grace). */
+	subscriptionActive: boolean;
+	/** When cancel-grace Pro ends (Pro until then), else null. */
+	proUntil: Date | null;
 }
 
 /** Alerts (abandoned-cart events) the shop has fired in the current calendar month. */
@@ -176,10 +242,28 @@ export async function getPlanState(shop: string): Promise<PlanState> {
 	const [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
 	const alertsUsed = await countAlertsThisMonth(shop);
 
-	if (shopRow?.billingActive) {
-		return { plan: 'pro', alertsUsed, limit: null, limitReached: false };
+	const subscriptionActive = !!shopRow?.billingActive;
+	const graceEnd = shopRow?.proAccessUntil ?? null;
+	const inGrace = !subscriptionActive && !!graceEnd && graceEnd.getTime() > Date.now();
+
+	if (subscriptionActive || inGrace) {
+		return {
+			plan: 'pro',
+			alertsUsed,
+			limit: null,
+			limitReached: false,
+			subscriptionActive,
+			proUntil: inGrace ? graceEnd : null
+		};
 	}
 
 	const limit = BILLING.freeAlertsPerMonth;
-	return { plan: 'free', alertsUsed, limit, limitReached: alertsUsed >= limit };
+	return {
+		plan: 'free',
+		alertsUsed,
+		limit,
+		limitReached: alertsUsed >= limit,
+		subscriptionActive: false,
+		proUntil: null
+	};
 }

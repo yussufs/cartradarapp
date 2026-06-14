@@ -104,6 +104,10 @@ export const shops = pgTable('shops', {
 	// Free is the default (no subscription); Pro unlocks unlimited alerts.
 	billingActive: boolean('billing_active').default(false).notNull(),
 	billingSubscriptionId: text('billing_subscription_id'),
+	// When a cancelled Pro subscription's paid period ends. Shopify cancels
+	// immediately, but the merchant paid through this date, so we keep them on Pro
+	// until it passes — then they fall to Free. Null when never cancelled / active.
+	proAccessUntil: timestamp('pro_access_until', { mode: 'date' }),
 	installedAt: timestamp('installed_at', { mode: 'date' }).defaultNow().notNull(),
 	uninstalledAt: timestamp('uninstalled_at', { mode: 'date' })
 });

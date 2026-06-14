@@ -38,16 +38,14 @@ export const GET: RequestHandler = async ({ request }) => {
 	await ensureShopRow(shop);
 	let [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
 
-	// DB says inactive, but the activation webhook may have been missed (e.g.
-	// delivered to another environment) — reconcile against Shopify directly.
-	if (!shopRow.billingActive) {
-		try {
-			if (await syncBillingState(shop)) {
-				[shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
-			}
-		} catch (err) {
-			console.error(`Billing state sync failed for ${shop}:`, err);
-		}
+	// Reconcile against Shopify (the source of truth) on every load, so the page
+	// reflects both activations and cancellations/expiries even if a webhook was
+	// missed (e.g. delivered to another environment, or a dev tunnel was down).
+	try {
+		await syncBillingState(shop);
+		[shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
+	} catch (err) {
+		console.error(`Billing state sync failed for ${shop}:`, err);
 	}
 
 	const plan = await getPlanState(shop);
@@ -70,7 +68,8 @@ export const GET: RequestHandler = async ({ request }) => {
 
 	return json({
 		plan: plan.plan,
-		billingActive: shopRow.billingActive,
+		subscriptionActive: plan.subscriptionActive,
+		proUntil: plan.proUntil ? plan.proUntil.toISOString() : null,
 		pricing: {
 			proPriceUsd: BILLING.proPriceUsd,
 			freeAlertsPerMonth: BILLING.freeAlertsPerMonth
@@ -108,8 +107,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ confirmationUrl });
 		}
 		if (body.action === 'cancel') {
-			await cancelSubscription(shop);
-			return json({ ok: true });
+			const proUntil = await cancelSubscription(shop);
+			return json({ ok: true, proUntil: proUntil ? proUntil.toISOString() : null });
 		}
 		return json({ error: 'Unknown action' }, { status: 422 });
 	} catch (err) {

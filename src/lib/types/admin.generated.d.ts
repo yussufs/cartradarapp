@@ -21,7 +21,14 @@ export type CartRadarBillingCancelMutationVariables = AdminTypes.Exact<{
 }>;
 
 
-export type CartRadarBillingCancelMutation = { appSubscriptionCancel?: AdminTypes.Maybe<{ userErrors: Array<Pick<AdminTypes.UserError, 'field' | 'message'>>, appSubscription?: AdminTypes.Maybe<Pick<AdminTypes.AppSubscription, 'id' | 'status'>> }> };
+export type CartRadarBillingCancelMutation = { appSubscriptionCancel?: AdminTypes.Maybe<{ userErrors: Array<Pick<AdminTypes.UserError, 'field' | 'message'>>, appSubscription?: AdminTypes.Maybe<Pick<AdminTypes.AppSubscription, 'id' | 'status' | 'currentPeriodEnd'>> }> };
+
+export type CartRadarSubscriptionPeriodEndQueryVariables = AdminTypes.Exact<{
+  id: AdminTypes.Scalars['ID']['input'];
+}>;
+
+
+export type CartRadarSubscriptionPeriodEndQuery = { node?: AdminTypes.Maybe<Pick<AdminTypes.AppSubscription, 'currentPeriodEnd'>> };
 
 export type CartRadarSubscriptionQueryVariables = AdminTypes.Exact<{ [key: string]: never; }>;
 
@@ -51,6 +58,7 @@ export type CartRadarShopProfileQueryVariables = AdminTypes.Exact<{ [key: string
 export type CartRadarShopProfileQuery = { shop: Pick<AdminTypes.Shop, 'name' | 'currencyCode'> };
 
 interface GeneratedQueryTypes {
+  "#graphql\n\t\t\t\tquery CartRadarSubscriptionPeriodEnd($id: ID!) {\n\t\t\t\t\tnode(id: $id) {\n\t\t\t\t\t\t... on AppSubscription {\n\t\t\t\t\t\t\tcurrentPeriodEnd\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}": {return: CartRadarSubscriptionPeriodEndQuery, variables: CartRadarSubscriptionPeriodEndQueryVariables},
   "#graphql\n\t\tquery CartRadarSubscription {\n\t\t\tcurrentAppInstallation {\n\t\t\t\tactiveSubscriptions {\n\t\t\t\t\tid\n\t\t\t\t\tstatus\n\t\t\t\t}\n\t\t\t}\n\t\t}": {return: CartRadarSubscriptionQuery, variables: CartRadarSubscriptionQueryVariables},
   "#graphql\n\t\tquery DevSeedProducts($count: Int!) {\n\t\t\tproducts(first: $count, query: \"status:active\") {\n\t\t\t\tnodes {\n\t\t\t\t\ttitle\n\t\t\t\t\tvariants(first: 1) {\n\t\t\t\t\t\tnodes {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\ttitle\n\t\t\t\t\t\t\tprice\n\t\t\t\t\t\t\tsku\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}": {return: DevSeedProductsQuery, variables: DevSeedProductsQueryVariables},
   "#graphql\n\t\t\tquery CartRadarShopProfile {\n\t\t\t\tshop {\n\t\t\t\t\tname\n\t\t\t\t\tcurrencyCode\n\t\t\t\t}\n\t\t\t}": {return: CartRadarShopProfileQuery, variables: CartRadarShopProfileQueryVariables},
@@ -58,7 +66,7 @@ interface GeneratedQueryTypes {
 
 interface GeneratedMutationTypes {
   "#graphql\n\t\tmutation CartRadarBillingActivate(\n\t\t\t$name: String!\n\t\t\t$returnUrl: URL!\n\t\t\t$lineItems: [AppSubscriptionLineItemInput!]!\n\t\t\t$test: Boolean\n\t\t) {\n\t\t\tappSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, test: $test) {\n\t\t\t\tuserErrors { field message }\n\t\t\t\tconfirmationUrl\n\t\t\t\tappSubscription { id }\n\t\t\t}\n\t\t}": {return: CartRadarBillingActivateMutation, variables: CartRadarBillingActivateMutationVariables},
-  "#graphql\n\t\tmutation CartRadarBillingCancel($id: ID!) {\n\t\t\tappSubscriptionCancel(id: $id) {\n\t\t\t\tuserErrors { field message }\n\t\t\t\tappSubscription { id status }\n\t\t\t}\n\t\t}": {return: CartRadarBillingCancelMutation, variables: CartRadarBillingCancelMutationVariables},
+  "#graphql\n\t\tmutation CartRadarBillingCancel($id: ID!) {\n\t\t\tappSubscriptionCancel(id: $id) {\n\t\t\t\tuserErrors { field message }\n\t\t\t\tappSubscription { id status currentPeriodEnd }\n\t\t\t}\n\t\t}": {return: CartRadarBillingCancelMutation, variables: CartRadarBillingCancelMutationVariables},
   "#graphql\n\t\tmutation CartRadarDraftOrderCreate($input: DraftOrderInput!) {\n\t\t\tdraftOrderCreate(input: $input) {\n\t\t\t\tuserErrors { field message }\n\t\t\t\tdraftOrder { id name invoiceUrl }\n\t\t\t}\n\t\t}": {return: CartRadarDraftOrderCreateMutation, variables: CartRadarDraftOrderCreateMutationVariables},
 }
 declare module '@shopify/admin-api-client' {

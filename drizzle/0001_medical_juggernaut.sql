@@ -1,0 +1,1 @@
+ALTER TABLE "shops" ADD COLUMN "pro_access_until" timestamp;

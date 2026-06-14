@@ -8,6 +8,10 @@
 	let working = $state(false);
 
 	let plan = $state<'free' | 'pro'>('free');
+	let subscriptionActive = $state(false);
+	let proUntil = $state<string | null>(null);
+	// Pro purely via the post-cancel grace window (no active paying subscription).
+	const inGrace = $derived(plan === 'pro' && !subscriptionActive);
 	let pricing = $state({ proPriceUsd: 29, freeAlertsPerMonth: 5 });
 	let alerts = $state<{ used: number; limit: number | null; limitReached: boolean }>({
 		used: 0,
@@ -31,6 +35,8 @@
 			if (!response.ok) throw new Error(`Failed to load billing (${response.status})`);
 			const data = await response.json();
 			plan = data.plan;
+			subscriptionActive = data.subscriptionActive;
+			proUntil = data.proUntil;
 			pricing = data.pricing;
 			alerts = data.alerts;
 			recovery = data.recovery;
@@ -76,12 +82,16 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ action: 'cancel' })
 			});
+			const data = await response.json();
 			if (!response.ok) {
-				const data = await response.json();
 				actionError = data.error ?? 'Could not cancel. Please try again.';
 				return;
 			}
-			window.shopify?.toast?.show('Downgraded to Free');
+			window.shopify?.toast?.show(
+				data.proUntil
+					? `Pro stays active until ${when(data.proUntil)}, then you move to Free`
+					: 'Moved to Free'
+			);
 			await load();
 		} catch {
 			actionError = 'Could not cancel. Please try again.';
@@ -97,6 +107,14 @@
 		} catch {
 			return `${c} ${value.toFixed(2)}`;
 		}
+	}
+
+	function when(iso: string): string {
+		return new Date(iso).toLocaleDateString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
 	}
 </script>
 
@@ -133,6 +151,16 @@
 				</Banner>
 			{/if}
 
+			{#if inGrace}
+				<Banner tone="info" title="Your Pro plan is cancelled">
+					<p>
+						You'll keep unlimited alerts until <strong
+							>{proUntil ? when(proUntil) : 'the end of your billing period'}</strong
+						>, then move to Free. Resubscribe any time to stay on Pro.
+					</p>
+				</Banner>
+			{/if}
+
 			<Card title="Your plan">
 				{#snippet actions()}
 					{#if plan === 'pro'}
@@ -152,8 +180,10 @@
 						</ul>
 						{#if plan === 'free'}
 							<Badge tone="info">Current plan</Badge>
-						{:else}
+						{:else if subscriptionActive}
 							<Button loading={working} onclick={downgrade}>Downgrade to Free</Button>
+						{:else}
+							<span class="muted">Starts {proUntil ? when(proUntil) : 'soon'}</span>
 						{/if}
 					</div>
 					<div class="plan-col" class:current={plan === 'pro'}>
@@ -166,8 +196,10 @@
 							<li>Email &amp; Slack alerts</li>
 							<li>Recovery tracking &amp; analytics</li>
 						</ul>
-						{#if plan === 'pro'}
+						{#if plan === 'pro' && subscriptionActive}
 							<Badge tone="success">Current plan</Badge>
+						{:else if inGrace}
+							<Button variant="primary" loading={working} onclick={upgrade}>Resubscribe</Button>
 						{:else}
 							<Button variant="primary" loading={working} onclick={upgrade}>
 								Upgrade to Pro — {money(pricing.proPriceUsd, 'USD')}/mo
@@ -252,6 +284,11 @@
 	.per {
 		font-size: 15px;
 		font-weight: 400;
+		color: var(--p-color-text-secondary, #6d7175);
+	}
+
+	.muted {
+		font-size: 13px;
 		color: var(--p-color-text-secondary, #6d7175);
 	}
 
