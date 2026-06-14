@@ -17,7 +17,6 @@ interface SettingsBody {
 	channels: {
 		emailEnabled: boolean;
 		slackEnabled: boolean;
-		slackWebhookUrl: string | null;
 	};
 }
 
@@ -64,9 +63,15 @@ export const GET: RequestHandler = async ({ request }) => {
 			? {
 					emailEnabled: channels.emailEnabled,
 					slackEnabled: channels.slackEnabled,
-					slackWebhookUrl: channels.slackWebhookUrl
+					slackConnected: !!channels.slackWebhookUrl,
+					slackChannelName: channels.slackChannelName
 				}
-			: { emailEnabled: true, slackEnabled: false, slackWebhookUrl: null },
+			: {
+					emailEnabled: true,
+					slackEnabled: false,
+					slackConnected: false,
+					slackChannelName: null
+				},
 		currency: shopRow.currency ?? 'USD'
 	});
 };
@@ -108,11 +113,6 @@ export const PUT: RequestHandler = async ({ request }) => {
 		errors.push('Attribution window must be between 1 and 90 days');
 	}
 
-	const slackWebhookUrl = body.channels?.slackWebhookUrl?.trim() || null;
-	if (body.channels?.slackEnabled && !slackWebhookUrl?.startsWith('https://hooks.slack.com/')) {
-		errors.push('Slack webhook URL must start with https://hooks.slack.com/');
-	}
-
 	if (errors.length > 0) return json({ errors }, { status: 422 });
 
 	await ensureShopRow(shop);
@@ -136,10 +136,12 @@ export const PUT: RequestHandler = async ({ request }) => {
 		await db.insert(alertRules).values({ shop, ...ruleValues });
 	}
 
+	// Slack connection (webhook + channel) is managed via OAuth (/api/slack +
+	// the callback), so we only toggle enable/disable here and never touch the
+	// stored webhook. slackEnabled only takes effect once a webhook is connected.
 	const channelValues = {
 		emailEnabled: !!body.channels.emailEnabled,
 		slackEnabled: !!body.channels.slackEnabled,
-		slackWebhookUrl,
 		updatedAt: new Date()
 	};
 	await db

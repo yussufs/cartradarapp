@@ -28,6 +28,16 @@ export type CartRadarSubscriptionQueryVariables = AdminTypes.Exact<{ [key: strin
 
 export type CartRadarSubscriptionQuery = { currentAppInstallation: { activeSubscriptions: Array<Pick<AdminTypes.AppSubscription, 'id' | 'status'>> } };
 
+export type DevSeedProductsQueryVariables = AdminTypes.Exact<{
+  count: AdminTypes.Scalars['Int']['input'];
+}>;
+
+
+export type DevSeedProductsQuery = { products: { nodes: Array<(
+      Pick<AdminTypes.Product, 'title'>
+      & { variants: { nodes: Array<Pick<AdminTypes.ProductVariant, 'id' | 'title' | 'price' | 'sku'>> } }
+    )> } };
+
 export type CartRadarDraftOrderCreateMutationVariables = AdminTypes.Exact<{
   input: AdminTypes.DraftOrderInput;
 }>;
@@ -42,6 +52,7 @@ export type CartRadarShopProfileQuery = { shop: Pick<AdminTypes.Shop, 'name' | '
 
 interface GeneratedQueryTypes {
   "#graphql\n\t\tquery CartRadarSubscription {\n\t\t\tcurrentAppInstallation {\n\t\t\t\tactiveSubscriptions {\n\t\t\t\t\tid\n\t\t\t\t\tstatus\n\t\t\t\t}\n\t\t\t}\n\t\t}": {return: CartRadarSubscriptionQuery, variables: CartRadarSubscriptionQueryVariables},
+  "#graphql\n\t\tquery DevSeedProducts($count: Int!) {\n\t\t\tproducts(first: $count, query: \"status:active\") {\n\t\t\t\tnodes {\n\t\t\t\t\ttitle\n\t\t\t\t\tvariants(first: 1) {\n\t\t\t\t\t\tnodes {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\ttitle\n\t\t\t\t\t\t\tprice\n\t\t\t\t\t\t\tsku\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}": {return: DevSeedProductsQuery, variables: DevSeedProductsQueryVariables},
   "#graphql\n\t\t\tquery CartRadarShopProfile {\n\t\t\t\tshop {\n\t\t\t\t\tname\n\t\t\t\t\tcurrencyCode\n\t\t\t\t}\n\t\t\t}": {return: CartRadarShopProfileQuery, variables: CartRadarShopProfileQueryVariables},
 }
 

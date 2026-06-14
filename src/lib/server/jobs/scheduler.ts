@@ -5,6 +5,12 @@
  * single status-guarded `UPDATE … WHERE status = 'active' … RETURNING`, which
  * Postgres serializes row-by-row, so each checkout is claimed (and alerted)
  * exactly once no matter how many instances tick concurrently.
+ *
+ * Hardening / scaling (see TODO.md "Scheduler hardening"): this in-process loop
+ * is fine for a single persistent Node process. To decouple it, trigger
+ * `POST /api/cron/evaluate` (CRON_SECRET-guarded) from an external scheduler and
+ * stop starting this loop. For durable retries/backoff at scale, move to a job
+ * queue on the existing Postgres (e.g. pg-boss).
  */
 import { evaluateAbandonedCheckouts } from './evaluate';
 

@@ -3,6 +3,7 @@
  * and throws on failure — the dispatcher records the outcome per channel.
  */
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import type { AlertContent } from './format';
 
@@ -25,15 +26,36 @@ function getSesClient(): SESv2Client {
 	return sesClient;
 }
 
-export function isEmailConfigured(): boolean {
+/** True when AWS SES is configured to actually send. */
+function sesConfigured(): boolean {
 	return !!env.ALERT_FROM_EMAIL;
+}
+
+/**
+ * Email is "configured" when SES can send for real, or — in dev only — always,
+ * because dev falls back to logging the message to the console (see sendEmail).
+ * This keeps the full alert funnel working locally without AWS credentials.
+ */
+export function isEmailConfigured(): boolean {
+	return sesConfigured() || dev;
 }
 
 export async function sendEmail(
 	recipients: string[],
 	content: Pick<AlertContent, 'subject' | 'html' | 'text'>
 ): Promise<string | null> {
-	if (!isEmailConfigured()) throw new Error('ALERT_FROM_EMAIL is not configured');
+	if (!sesConfigured()) {
+		if (dev) {
+			console.log(
+				`\n[dev] SES not configured — logging email instead of sending:\n` +
+					`  To:      ${recipients.join(', ')}\n` +
+					`  Subject: ${content.subject}\n` +
+					`${content.text}\n`
+			);
+			return 'dev-console-email';
+		}
+		throw new Error('ALERT_FROM_EMAIL is not configured');
+	}
 
 	const result = await getSesClient().send(
 		new SendEmailCommand({

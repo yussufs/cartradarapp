@@ -38,6 +38,9 @@
 	<s-link href="/app" rel="home">Dashboard</s-link>
 	<s-link href="/app/settings">Settings</s-link>
 	<s-link href="/app/billing">Plan & billing</s-link>
+	{#if data.devTools}
+		<s-link href="/app/dev">Dev tools</s-link>
+	{/if}
 </s-app-nav>
 
 <div class="app-frame">

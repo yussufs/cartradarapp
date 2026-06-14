@@ -135,7 +135,9 @@ export const channelSettings = pgTable('channel_settings', {
 	shop: text('shop').primaryKey(),
 	emailEnabled: boolean('email_enabled').default(true).notNull(),
 	slackEnabled: boolean('slack_enabled').default(false).notNull(),
+	// Channel webhook URL + name obtained via Slack OAuth ("Connect Slack").
 	slackWebhookUrl: text('slack_webhook_url'),
+	slackChannelName: text('slack_channel_name'),
 	updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull()
 });
 
@@ -191,6 +193,9 @@ export const checkouts = pgTable(
 		checkoutCreatedAt: timestamp('checkout_created_at', { mode: 'date' }),
 		lastActivityAt: timestamp('last_activity_at', { mode: 'date' }).notNull(),
 		alertedAt: timestamp('alerted_at', { mode: 'date' }),
+		// Delivery attempts made for this cart's alert. Lets the evaluator retry
+		// transient send failures (self-heal) without re-alerting indefinitely.
+		alertAttempts: integer('alert_attempts').default(0).notNull(),
 		recoveredAt: timestamp('recovered_at', { mode: 'date' }),
 		recoveredOrderId: text('recovered_order_id'),
 		recoveredAmount: numeric('recovered_amount', { precision: 12, scale: 2 }),

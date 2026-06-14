@@ -31,7 +31,10 @@
 	// Channels
 	let emailEnabled = $state(true);
 	let slackEnabled = $state(false);
-	let slackWebhookUrl = $state('');
+	let slackConnected = $state(false);
+	let slackChannelName = $state<string | null>(null);
+	let slackWorking = $state(false);
+	let slackNotice = $state<{ tone: 'success' | 'warning'; text: string } | null>(null);
 
 	// Recipients (managed independently of the form save)
 	let recipients = $state<RecipientView[]>([]);
@@ -82,15 +85,73 @@
 
 			emailEnabled = data.channels.emailEnabled;
 			slackEnabled = data.channels.slackEnabled;
-			slackWebhookUrl = data.channels.slackWebhookUrl ?? '';
+			slackConnected = data.channels.slackConnected;
+			slackChannelName = data.channels.slackChannelName ?? null;
 
 			currency = data.currency;
+
+			// Surface the result of a just-completed Slack OAuth round-trip.
+			const slackResult = new URLSearchParams(window.location.search).get('slack');
+			if (slackResult === 'connected') {
+				slackNotice = {
+					tone: 'success',
+					text: slackChannelName
+						? `Slack connected — alerts will post to ${slackChannelName}.`
+						: 'Slack connected.'
+				};
+			} else if (slackResult === 'denied') {
+				slackNotice = { tone: 'warning', text: 'Slack connection was cancelled.' };
+			} else if (slackResult === 'error') {
+				slackNotice = { tone: 'warning', text: "Couldn't connect Slack. Please try again." };
+			}
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load settings';
 		} finally {
 			isLoading = false;
 		}
 	});
+
+	async function connectSlack() {
+		slackWorking = true;
+		slackNotice = null;
+		try {
+			const response = await authFetch('/api/slack', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'connect' })
+			});
+			const data = await response.json();
+			if (!response.ok) {
+				slackNotice = { tone: 'warning', text: data.error ?? 'Could not start Slack connection.' };
+				return;
+			}
+			// Break out of the Shopify iframe to Slack's consent screen.
+			window.open(data.url, '_top');
+		} catch {
+			slackNotice = { tone: 'warning', text: 'Could not start Slack connection.' };
+		} finally {
+			slackWorking = false;
+		}
+	}
+
+	async function disconnectSlack() {
+		slackWorking = true;
+		try {
+			const response = await authFetch('/api/slack', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'disconnect' })
+			});
+			if (response.ok) {
+				slackConnected = false;
+				slackEnabled = false;
+				slackChannelName = null;
+				window.shopify?.toast?.show('Slack disconnected');
+			}
+		} finally {
+			slackWorking = false;
+		}
+	}
 
 	async function save(): Promise<boolean> {
 		saving = true;
@@ -110,8 +171,7 @@
 					attributionWindowDays: parseInt(attributionWindowDays, 10),
 					channels: {
 						emailEnabled,
-						slackEnabled,
-						slackWebhookUrl: slackWebhookUrl.trim() || null
+						slackEnabled
 					}
 				})
 			});
@@ -291,22 +351,36 @@
 				</div>
 			</Card>
 
-			<Card title="Slack alerts">
+			<Card
+				title="Slack alerts"
+				subtitle="Connect Slack and pick a channel — alerts post there automatically."
+			>
 				<div class="form-stack">
-					<Switch
-						label="Slack"
-						name="slackEnabled"
-						checked={slackEnabled}
-						onchange={(e) => (slackEnabled = (e.target as HTMLInputElement).checked)}
-					/>
-					<TextField
-						label="Incoming webhook URL"
-						name="slackWebhookUrl"
-						value={slackWebhookUrl}
-						placeholder="https://hooks.slack.com/services/…"
-						helpText="In Slack: Apps → Incoming Webhooks → Add to a channel, then paste the URL here."
-						oninput={(e) => (slackWebhookUrl = (e.target as HTMLInputElement).value)}
-					/>
+					{#if slackNotice}
+						<Banner tone={slackNotice.tone} dismissible ondismiss={() => (slackNotice = null)}>
+							<p>{slackNotice.text}</p>
+						</Banner>
+					{/if}
+
+					{#if slackConnected}
+						<Switch
+							label="Slack"
+							name="slackEnabled"
+							checked={slackEnabled}
+							helpText={slackChannelName ? `Posting to ${slackChannelName}` : 'Connected'}
+							onchange={(e) => (slackEnabled = (e.target as HTMLInputElement).checked)}
+						/>
+						<div class="slack-row">
+							<Button loading={slackWorking} onclick={disconnectSlack}>Disconnect Slack</Button>
+						</div>
+					{:else}
+						<p class="hint">No Slack workspace connected yet.</p>
+						<div class="slack-row">
+							<Button variant="primary" loading={slackWorking} onclick={connectSlack}>
+								Connect Slack
+							</Button>
+						</div>
+					{/if}
 				</div>
 			</Card>
 		</div>

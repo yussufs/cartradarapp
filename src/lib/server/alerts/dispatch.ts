@@ -142,6 +142,7 @@ export async function dispatchTestAlert(
 		checkoutCreatedAt: new Date(),
 		lastActivityAt: new Date(),
 		alertedAt: null,
+		alertAttempts: 0,
 		recoveredAt: null,
 		recoveredOrderId: null,
 		recoveredAmount: null,

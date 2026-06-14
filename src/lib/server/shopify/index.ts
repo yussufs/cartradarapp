@@ -1,5 +1,5 @@
 import '@shopify/shopify-api/adapters/web-api';
-import { shopifyApi, ApiVersion, Session, type Shopify } from '@shopify/shopify-api';
+import { shopifyApi, ApiVersion, LogSeverity, Session, type Shopify } from '@shopify/shopify-api';
 import { DrizzleSessionStorage } from './session-storage';
 import { env } from '$env/dynamic/private';
 
@@ -31,7 +31,10 @@ function createShopifyApi(): Shopify {
 		hostName: hostName,
 		hostScheme: 'https',
 		apiVersion: ApiVersion.October25,
-		isEmbeddedApp: true
+		isEmbeddedApp: true,
+		// Quiet the library's INFO banner + "future flag disabled" notices. Set to
+		// LogSeverity.Info or Debug if you need the verbose output back.
+		logger: { level: LogSeverity.Warning }
 	});
 }
 

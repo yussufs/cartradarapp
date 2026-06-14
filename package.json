@@ -7,6 +7,7 @@
 	"license": "MIT",
 	"scripts": {
 		"dev": "vite dev",
+		"dev:tunnel": "bash scripts/dev-tunnel.sh",
 		"build": "vite build",
 		"preview": "vite preview",
 		"start": "node build",

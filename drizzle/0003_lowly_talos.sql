@@ -1,0 +1,1 @@
+ALTER TABLE "checkouts" ADD COLUMN "alert_attempts" integer DEFAULT 0 NOT NULL;
