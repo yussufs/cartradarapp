@@ -1,14 +1,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import { authenticateRequest, AuthError } from '$lib/server/shopify/auth';
 import { db } from '$lib/server/db';
-import { shops, usageCharges } from '$lib/shared/db/schema';
+import { checkouts, shops } from '$lib/shared/db/schema';
 import { ensureShopRow } from '$lib/server/checkouts';
 import { BILLING } from '$lib/server/billing/plans';
 import {
 	activateBilling,
 	cancelSubscription,
+	getPlanState,
 	syncBillingState
 } from '$lib/server/billing/subscriptions';
 
@@ -49,44 +50,41 @@ export const GET: RequestHandler = async ({ request }) => {
 		}
 	}
 
-	const since = new Date(Date.now() - PERIOD_MS);
-	const [usage] = await db
-		.select({
-			feeCount: sql<number>`count(*)`,
-			feeTotal: sql<string>`coalesce(sum(${usageCharges.amount}), 0)`,
-			recoveredTotal: sql<string>`coalesce(sum(${usageCharges.recoveredAmount}), 0)`
-		})
-		.from(usageCharges)
-		.where(and(eq(usageCharges.shop, shop), gte(usageCharges.createdAt, since)));
+	const plan = await getPlanState(shop);
 
-	const recent = await db
+	// Recovery analytics (last 30 days) — Cart Radar's value, independent of billing.
+	const since = new Date(Date.now() - PERIOD_MS);
+	const [recovery] = await db
 		.select({
-			id: usageCharges.id,
-			orderId: usageCharges.orderId,
-			recoveredAmount: usageCharges.recoveredAmount,
-			amount: usageCharges.amount,
-			billed: sql<boolean>`${usageCharges.shopifyUsageRecordId} is not null`,
-			createdAt: usageCharges.createdAt
+			recoveries: sql<number>`count(*)`,
+			recoveredRevenue: sql<string>`coalesce(sum(${checkouts.recoveredAmount}), 0)`
 		})
-		.from(usageCharges)
-		.where(eq(usageCharges.shop, shop))
-		.orderBy(desc(usageCharges.createdAt))
-		.limit(10);
+		.from(checkouts)
+		.where(
+			and(
+				eq(checkouts.shop, shop),
+				eq(checkouts.status, 'recovered'),
+				gte(checkouts.recoveredAt, since)
+			)
+		);
 
 	return json({
+		plan: plan.plan,
 		billingActive: shopRow.billingActive,
 		pricing: {
-			feePercent: BILLING.feeRate * 100,
-			minFeeUsd: BILLING.minFeeUsd,
-			cappedAmountUsd: BILLING.defaultCappedAmountUsd
+			proPriceUsd: BILLING.proPriceUsd,
+			freeAlertsPerMonth: BILLING.freeAlertsPerMonth
+		},
+		alerts: {
+			used: plan.alertsUsed,
+			limit: plan.limit,
+			limitReached: plan.limitReached
 		},
 		periodDays: 30,
-		usage: {
-			recoveries: Number(usage.feeCount),
-			feesUsd: usage.feeTotal,
-			recoveredRevenue: usage.recoveredTotal
+		recovery: {
+			recoveries: Number(recovery.recoveries),
+			recoveredRevenue: recovery.recoveredRevenue
 		},
-		recent,
 		currency: shopRow.currency ?? 'USD'
 	});
 };

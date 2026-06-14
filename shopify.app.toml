@@ -16,7 +16,7 @@ api_version = "2026-07"
   compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
   [[webhooks.subscriptions]]
-  topics = [ "app_subscriptions/update", "app_subscriptions/approaching_capped_amount" ]
+  topics = [ "app_subscriptions/update" ]
   uri = "/webhooks/billing"
 
   [[webhooks.subscriptions]]
@@ -26,6 +26,10 @@ api_version = "2026-07"
   [[webhooks.subscriptions]]
   topics = [ "orders/create" ]
   uri = "/webhooks/orders"
+
+  [[webhooks.subscriptions]]
+  topics = [ "draft_orders/update" ]
+  uri = "/webhooks/draft-orders"
 
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
@@ -41,7 +45,7 @@ api_version = "2026-07"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_orders,read_customers"
+scopes = "read_orders,read_customers,write_draft_orders"
 use_legacy_install_flow = false
 
 [auth]

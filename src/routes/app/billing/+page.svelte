@@ -1,25 +1,20 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Page, Card, Button, Banner, Badge, DataTable, Skeleton } from '$lib/components';
-
-	interface RecentFee {
-		id: string;
-		orderId: string | null;
-		recoveredAmount: string | null;
-		amount: string;
-		billed: boolean;
-		createdAt: string;
-	}
+	import { Page, Card, Button, Banner, Badge, Skeleton } from '$lib/components';
 
 	let isLoading = $state(true);
 	let loadError = $state('');
 	let actionError = $state('');
 	let working = $state(false);
 
-	let billingActive = $state(false);
-	let pricing = $state({ feePercent: 1, minFeeUsd: 1, cappedAmountUsd: 500 });
-	let usage = $state({ recoveries: 0, feesUsd: '0', recoveredRevenue: '0' });
-	let recent = $state<RecentFee[]>([]);
+	let plan = $state<'free' | 'pro'>('free');
+	let pricing = $state({ proPriceUsd: 29, freeAlertsPerMonth: 5 });
+	let alerts = $state<{ used: number; limit: number | null; limitReached: boolean }>({
+		used: 0,
+		limit: 5,
+		limitReached: false
+	});
+	let recovery = $state({ recoveries: 0, recoveredRevenue: '0' });
 	let currency = $state('USD');
 
 	async function authFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -35,10 +30,10 @@
 			const response = await authFetch('/api/billing');
 			if (!response.ok) throw new Error(`Failed to load billing (${response.status})`);
 			const data = await response.json();
-			billingActive = data.billingActive;
+			plan = data.plan;
 			pricing = data.pricing;
-			usage = data.usage;
-			recent = data.recent;
+			alerts = data.alerts;
+			recovery = data.recovery;
 			currency = data.currency;
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load billing';
@@ -49,7 +44,7 @@
 
 	onMount(load);
 
-	async function activate() {
+	async function upgrade() {
 		working = true;
 		actionError = '';
 		try {
@@ -60,19 +55,19 @@
 			});
 			const data = await response.json();
 			if (!response.ok) {
-				actionError = data.error ?? 'Could not start activation. Please try again.';
+				actionError = data.error ?? 'Could not start the upgrade. Please try again.';
 				return;
 			}
-			// Merchant approves the usage subscription on Shopify's confirmation page
+			// Merchant approves the $29/mo subscription on Shopify's confirmation page
 			window.open(data.confirmationUrl, '_top');
 		} catch {
-			actionError = 'Could not start activation. Please try again.';
+			actionError = 'Could not start the upgrade. Please try again.';
 		} finally {
 			working = false;
 		}
 	}
 
-	async function cancel() {
+	async function downgrade() {
 		working = true;
 		actionError = '';
 		try {
@@ -86,7 +81,7 @@
 				actionError = data.error ?? 'Could not cancel. Please try again.';
 				return;
 			}
-			window.shopify?.toast?.show('Billing cancelled');
+			window.shopify?.toast?.show('Downgraded to Free');
 			await load();
 		} catch {
 			actionError = 'Could not cancel. Please try again.';
@@ -103,29 +98,13 @@
 			return `${c} ${value.toFixed(2)}`;
 		}
 	}
-
-	function usd(amount: string | number): string {
-		const value = typeof amount === 'string' ? parseFloat(amount) : amount;
-		return `$${value.toFixed(2)}`;
-	}
-
-	function when(iso: string): string {
-		return new Date(iso).toLocaleDateString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			year: 'numeric'
-		});
-	}
 </script>
 
 <svelte:head>
 	<title>Plan & billing · Cart Radar</title>
 </svelte:head>
 
-<Page
-	title="Plan & billing"
-	subtitle="Cart Radar only earns when it recovers a sale for you — no monthly fee."
->
+<Page title="Plan & billing" subtitle="One simple plan — upgrade for unlimited alerts.">
 	{#if isLoading}
 		<Card>
 			<div class="skeleton-stack">
@@ -145,98 +124,84 @@
 				</Banner>
 			{/if}
 
-			<Card title="How pricing works">
-				{#snippet actions()}
-					{#if billingActive}
-						<Badge tone="success">Active</Badge>
-					{:else}
-						<Badge tone="caution">Not active</Badge>
-					{/if}
-				{/snippet}
-				<div class="pricing-body">
-					<p class="headline">
-						{pricing.feePercent}% of every cart we recover
-						<span class="headline-sub">· {usd(pricing.minFeeUsd)} minimum per recovery</span>
-					</p>
-					<ul class="pricing-points">
-						<li>
-							No monthly fee — you pay only when a high-value cart is recovered after an alert.
-						</li>
-						<li>Unlimited email, Slack, and SMS alerts.</li>
-						<li>
-							Only <strong>exact</strong> recoveries (the order came from the cart we alerted on) are
-							billed.
-						</li>
-						<li>
-							Capped at {usd(pricing.cappedAmountUsd)}/month by default — you approve any change.
-						</li>
-					</ul>
-					{#if billingActive}
-						<Button loading={working} onclick={cancel}>Cancel billing</Button>
-					{:else}
-						<Button variant="primary" loading={working} onclick={activate}>Activate billing</Button>
-					{/if}
-				</div>
-			</Card>
-
-			{#if !billingActive}
-				<Banner tone="info">
+			{#if plan === 'free' && alerts.limitReached}
+				<Banner tone="warning" title="You've hit your monthly alert limit">
 					<p>
-						Billing isn't active yet, so we can't bill recoveries. Activating is free — you're only
-						charged when Cart Radar actually recovers a cart.
+						You've used all {alerts.limit} alerts this month, so new alerts are paused until next month.
+						Upgrade to Pro for unlimited alerts.
 					</p>
 				</Banner>
 			{/if}
+
+			<Card title="Your plan">
+				{#snippet actions()}
+					{#if plan === 'pro'}
+						<Badge tone="success">Pro</Badge>
+					{:else}
+						<Badge tone="info">Free</Badge>
+					{/if}
+				{/snippet}
+				<div class="plan-grid">
+					<div class="plan-col" class:current={plan === 'free'}>
+						<p class="plan-name">Free</p>
+						<p class="plan-price">{money(0)}<span class="per">/mo</span></p>
+						<ul class="plan-points">
+							<li>Up to {pricing.freeAlertsPerMonth} alerts per month</li>
+							<li>Email &amp; Slack alerts</li>
+							<li>Recovery tracking &amp; analytics</li>
+						</ul>
+						{#if plan === 'free'}
+							<Badge tone="info">Current plan</Badge>
+						{:else}
+							<Button loading={working} onclick={downgrade}>Downgrade to Free</Button>
+						{/if}
+					</div>
+					<div class="plan-col" class:current={plan === 'pro'}>
+						<p class="plan-name">Pro</p>
+						<p class="plan-price">
+							{money(pricing.proPriceUsd, 'USD')}<span class="per">/mo</span>
+						</p>
+						<ul class="plan-points">
+							<li><strong>Unlimited</strong> alerts</li>
+							<li>Email &amp; Slack alerts</li>
+							<li>Recovery tracking &amp; analytics</li>
+						</ul>
+						{#if plan === 'pro'}
+							<Badge tone="success">Current plan</Badge>
+						{:else}
+							<Button variant="primary" loading={working} onclick={upgrade}>
+								Upgrade to Pro — {money(pricing.proPriceUsd, 'USD')}/mo
+							</Button>
+						{/if}
+					</div>
+				</div>
+			</Card>
+
+			<Card title="This month">
+				<div class="usage-row">
+					<div>
+						<p class="usage-label">Alerts used</p>
+						<p class="usage-value">
+							{alerts.used}{#if alerts.limit !== null}<span class="usage-sub">
+									/ {alerts.limit}</span
+								>{:else}<span class="usage-sub"> · Unlimited</span>{/if}
+						</p>
+					</div>
+				</div>
+			</Card>
 
 			<Card title="Last 30 days">
 				<div class="usage-row">
 					<div>
 						<p class="usage-label">Carts recovered</p>
-						<p class="usage-value">{usage.recoveries}</p>
+						<p class="usage-value">{recovery.recoveries}</p>
 					</div>
 					<div>
 						<p class="usage-label">Revenue recovered</p>
-						<p class="usage-value">{money(usage.recoveredRevenue)}</p>
-					</div>
-					<div>
-						<p class="usage-label">Fees</p>
-						<p class="usage-value">{usd(usage.feesUsd)}</p>
+						<p class="usage-value">{money(recovery.recoveredRevenue)}</p>
 					</div>
 				</div>
 			</Card>
-
-			{#if recent.length > 0}
-				<Card title="Recent recovery fees" padding="none">
-					<DataTable>
-						<thead>
-							<tr>
-								<th>Date</th>
-								<th>Order</th>
-								<th>Recovered</th>
-								<th>Fee</th>
-								<th>Status</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each recent as fee (fee.id)}
-								<tr>
-									<td>{when(fee.createdAt)}</td>
-									<td>{fee.orderId ?? '—'}</td>
-									<td>{fee.recoveredAmount ? money(fee.recoveredAmount) : '—'}</td>
-									<td>{usd(fee.amount)}</td>
-									<td>
-										{#if fee.billed}
-											<Badge tone="success">Billed</Badge>
-										{:else}
-											<Badge tone="caution">Pending</Badge>
-										{/if}
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</DataTable>
-				</Card>
-			{/if}
 		</div>
 	{/if}
 </Page>
@@ -249,26 +214,48 @@
 		gap: 16px;
 	}
 
-	.pricing-body {
+	.plan-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		gap: 16px;
+	}
+
+	.plan-col {
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
 		align-items: flex-start;
+		padding: 16px;
+		border: 1px solid var(--p-color-border, #e3e3e3);
+		border-radius: 12px;
 	}
 
-	.headline {
+	.plan-col.current {
+		border-color: var(--p-color-border-emphasis, #1a1a1a);
+		background: var(--p-color-bg-surface-secondary, #f6f6f7);
+	}
+
+	.plan-name {
 		margin: 0;
-		font-size: 22px;
+		font-size: 13px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: var(--p-color-text-secondary, #6d7175);
+	}
+
+	.plan-price {
+		margin: 0;
+		font-size: 28px;
 		font-weight: 650;
 	}
 
-	.headline-sub {
+	.per {
 		font-size: 15px;
 		font-weight: 400;
 		color: var(--p-color-text-secondary, #6d7175);
 	}
 
-	.pricing-points {
+	.plan-points {
 		margin: 0;
 		padding-left: 18px;
 		display: flex;
@@ -293,5 +280,11 @@
 		margin: 0;
 		font-size: 24px;
 		font-weight: 650;
+	}
+
+	.usage-sub {
+		font-size: 15px;
+		font-weight: 400;
+		color: var(--p-color-text-secondary, #6d7175);
 	}
 </style>

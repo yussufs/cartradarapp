@@ -1,23 +1,19 @@
 /**
- * Single outcome-based plan: Cart Radar takes a success fee on each cart it
- * recovers — there is no monthly fee and no per-message charge. Merchants only
- * pay when an alert leads to a recovered sale.
+ * Two plans: Free and Pro.
+ * - Free: up to FREE_ALERTS_PER_MONTH abandoned-cart alerts per calendar month,
+ *   then alerts pause until the next month or an upgrade.
+ * - Pro: a flat $29/month recurring subscription with unlimited alerts.
+ *
+ * There is no per-recovery success fee — Cart Radar bills only the flat Pro fee.
  */
-export const BILLING = {
-	subscriptionName: 'Cart Radar',
-	/** Fee as a fraction of the recovered order's value */
-	feeRate: 0.01,
-	/** Minimum fee per recovered cart, regardless of order size */
-	minFeeUsd: 1,
-	/**
-	 * Default 30-day usage cap the merchant approves (and can raise). Shopify
-	 * blocks usage charges past this, so it's set generously.
-	 */
-	defaultCappedAmountUsd: 500
-} as const;
+export type Plan = 'free' | 'pro';
 
-/** The success fee for a recovered order: max(1% of value, $1). */
-export function recoveryFeeUsd(orderTotal: number): number {
-	if (!isFinite(orderTotal) || orderTotal <= 0) return BILLING.minFeeUsd;
-	return Math.max(orderTotal * BILLING.feeRate, BILLING.minFeeUsd);
-}
+export const BILLING = {
+	subscriptionName: 'Cart Radar Pro',
+	/** Flat monthly price for the Pro plan, in USD. */
+	proPriceUsd: 29,
+	/** Shopify recurring interval the price is charged on. */
+	interval: 'EVERY_30_DAYS',
+	/** Alerts a Free shop may send per calendar month before alerts pause. */
+	freeAlertsPerMonth: 5
+} as const;

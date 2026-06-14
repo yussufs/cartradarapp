@@ -1,7 +1,7 @@
 /**
  * Alert dispatcher: fans one abandoned checkout out to the shop's configured
- * channels and records every delivery attempt. There are no per-message charges
- * or quotas — Cart Radar bills only on recovered carts (see billing).
+ * channels and records every delivery attempt. Free-plan shops are paused once
+ * they reach their monthly alert allowance (see getPlanState); Pro is unlimited.
  */
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
@@ -13,13 +13,14 @@ import {
 	type AlertChannel
 } from '$lib/shared/db/schema';
 import { getVerifiedDestinations } from '$lib/server/recipients';
+import { getPlanState } from '$lib/server/billing/subscriptions';
 import { buildAlertContent, type CheckoutRow } from './format';
-import { isEmailConfigured, isSmsConfigured, sendEmail, sendSlack, sendSms } from './channels';
+import { isEmailConfigured, sendEmail, sendSlack } from './channels';
 
 export type DispatchOutcome =
 	| { status: 'sent'; sent: number; failed: number }
 	| { status: 'all_failed'; failed: number }
-	| { status: 'skipped'; reason: 'no_channels' | 'shop_missing' };
+	| { status: 'skipped'; reason: 'no_channels' | 'shop_missing' | 'limit_reached' };
 
 export async function dispatchCheckoutAlert(checkout: CheckoutRow): Promise<DispatchOutcome> {
 	const [shopRow] = await db.select().from(shops).where(eq(shops.shop, checkout.shop)).limit(1);
@@ -31,6 +32,10 @@ export async function dispatchCheckoutAlert(checkout: CheckoutRow): Promise<Disp
 		.where(eq(channelSettings.shop, checkout.shop))
 		.limit(1);
 	if (!channels) return { status: 'skipped', reason: 'no_channels' };
+
+	// Free plan: pause alerts once the monthly allowance is used up.
+	const plan = await getPlanState(checkout.shop);
+	if (plan.limitReached) return { status: 'skipped', reason: 'limit_reached' };
 
 	const content = buildAlertContent(checkout);
 	let sent = 0;
@@ -79,15 +84,6 @@ export async function dispatchCheckoutAlert(checkout: CheckoutRow): Promise<Disp
 		await record('slack', 'slack', () => sendSlack(webhookUrl, content.slackPayload));
 	}
 
-	const smsRecipients = channels.smsEnabled
-		? await getVerifiedDestinations(checkout.shop, 'sms')
-		: [];
-	if (smsRecipients.length > 0 && isSmsConfigured()) {
-		for (const phone of smsRecipients) {
-			await record('sms', phone, () => sendSms(phone, content.sms));
-		}
-	}
-
 	if (sent === 0 && failed === 0) return { status: 'skipped', reason: 'no_channels' };
 
 	if (sent > 0) {
@@ -125,8 +121,22 @@ export async function dispatchTestAlert(
 		customerEmail: 'customer@example.com',
 		customerPhone: '+1 555 010 1234',
 		lineItems: [
-			{ title: 'Sample product A', quantity: 2, price: '499.50', variantTitle: 'Large', sku: null },
-			{ title: 'Sample product B', quantity: 1, price: '250.00', variantTitle: null, sku: null }
+			{
+				title: 'Sample product A',
+				quantity: 2,
+				price: '499.50',
+				variantTitle: 'Large',
+				sku: null,
+				variantId: null
+			},
+			{
+				title: 'Sample product B',
+				quantity: 1,
+				price: '250.00',
+				variantTitle: null,
+				sku: null,
+				variantId: null
+			}
 		],
 		status: 'abandoned',
 		checkoutCreatedAt: new Date(),
@@ -136,12 +146,14 @@ export async function dispatchTestAlert(
 		recoveredOrderId: null,
 		recoveredAmount: null,
 		recoveryMatch: null,
+		draftOrderId: null,
+		draftOrderName: null,
+		draftOrderCreatedAt: null,
 		updatedAt: new Date()
 	};
 
 	const content = buildAlertContent(sample);
 	content.subject = `[Test] ${content.subject}`;
-	content.sms = `[Test] ${content.sms}`;
 
 	let sent = 0;
 	let failed = 0;
@@ -186,17 +198,6 @@ export async function dispatchTestAlert(
 	if (channels.slackEnabled && channels.slackWebhookUrl) {
 		const webhookUrl = channels.slackWebhookUrl;
 		await attempt('slack', 'slack', () => sendSlack(webhookUrl, content.slackPayload));
-	}
-
-	const smsRecipients = await getVerifiedDestinations(shop, 'sms');
-	if (channels.smsEnabled && smsRecipients.length > 0) {
-		if (isSmsConfigured()) {
-			for (const phone of smsRecipients) {
-				await attempt('sms', phone, () => sendSms(phone, content.sms));
-			}
-		} else {
-			errors.push('sms: server SMS sending is not configured');
-		}
 	}
 
 	return { sent, failed, errors };

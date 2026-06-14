@@ -12,7 +12,7 @@ import {
 	type RecoveryMatch
 } from '$lib/shared/db/schema';
 import type { CheckoutWebhookPayload, OrderWebhookPayload } from '$lib/types/shopify-webhooks';
-import { chargeRecovery } from '$lib/server/billing/subscriptions';
+import { attributeDraftOrderBySource } from '$lib/server/draft-orders';
 
 function parseDate(value: string | null | undefined): Date | null {
 	if (!value) return null;
@@ -40,7 +40,8 @@ function extractLineItems(payload: CheckoutWebhookPayload): LineItemSnapshot[] {
 		quantity: item.quantity ?? 1,
 		price: item.price ?? item.line_price ?? '0.00',
 		variantTitle: item.variant_title ?? null,
-		sku: item.sku ?? null
+		sku: item.sku ?? null,
+		variantId: item.variant_id ?? null
 	}));
 }
 
@@ -163,6 +164,22 @@ export async function markCheckoutOrdered(
 		.limit(1);
 	if (alreadyAttributed) return;
 
+	// Orders completed from a draft order are merchant-initiated recoveries —
+	// attributed exactly to the cart the draft was created from, never inferred
+	// from email/phone. (Fallback path: draft_orders/update is authoritative.)
+	if (payload.source_name === 'shopify_draft_order') {
+		if (payload.source_identifier) {
+			await attributeDraftOrderBySource(
+				shop,
+				orderId,
+				payload.source_identifier,
+				payload.total_price ?? null,
+				payload.currency ?? null
+			);
+		}
+		return;
+	}
+
 	// 1. Exact token match
 	let tokenCheckout: { id: string; status: CheckoutStatus } | undefined;
 	if (token) {
@@ -184,18 +201,6 @@ export async function markCheckoutOrdered(
 			);
 			if (recovered) {
 				console.log(`Recovered (token) checkout for ${shop} via order ${orderRef}`);
-				// Bill the success fee — exact (token) recoveries only
-				try {
-					await chargeRecovery(
-						shop,
-						tokenCheckout.id,
-						orderId,
-						payload.total_price ?? null,
-						payload.currency ?? 'USD'
-					);
-				} catch (err) {
-					console.error(`Failed to bill recovery fee for ${shop}:`, err);
-				}
 			}
 			return;
 		}

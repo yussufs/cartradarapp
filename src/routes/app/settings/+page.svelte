@@ -5,7 +5,7 @@
 
 	interface RecipientView {
 		id: string;
-		channel: 'email' | 'sms';
+		channel: 'email';
 		destination: string;
 		verified: boolean;
 		canResend: boolean;
@@ -32,12 +32,10 @@
 	let emailEnabled = $state(true);
 	let slackEnabled = $state(false);
 	let slackWebhookUrl = $state('');
-	let smsEnabled = $state(false);
 
 	// Recipients (managed independently of the form save)
 	let recipients = $state<RecipientView[]>([]);
 	const emailRecipients = $derived(recipients.filter((r) => r.channel === 'email'));
-	const smsRecipients = $derived(recipients.filter((r) => r.channel === 'sms'));
 
 	let currency = $state('USD');
 
@@ -85,7 +83,6 @@
 			emailEnabled = data.channels.emailEnabled;
 			slackEnabled = data.channels.slackEnabled;
 			slackWebhookUrl = data.channels.slackWebhookUrl ?? '';
-			smsEnabled = data.channels.smsEnabled;
 
 			currency = data.currency;
 		} catch (err) {
@@ -114,8 +111,7 @@
 					channels: {
 						emailEnabled,
 						slackEnabled,
-						slackWebhookUrl: slackWebhookUrl.trim() || null,
-						smsEnabled
+						slackWebhookUrl: slackWebhookUrl.trim() || null
 					}
 				})
 			});
@@ -311,31 +307,6 @@
 						helpText="In Slack: Apps → Incoming Webhooks → Add to a channel, then paste the URL here."
 						oninput={(e) => (slackWebhookUrl = (e.target as HTMLInputElement).value)}
 					/>
-				</div>
-			</Card>
-
-			<Card
-				title="SMS alerts"
-				subtitle="Each number gets a code by text to confirm before alerts start."
-			>
-				<div class="form-stack">
-					<Switch
-						label="SMS"
-						name="smsEnabled"
-						checked={smsEnabled}
-						onchange={(e) => (smsEnabled = (e.target as HTMLInputElement).checked)}
-					/>
-					<RecipientManager
-						channel="sms"
-						inputType="tel"
-						placeholder="+15551234567"
-						recipients={smsRecipients}
-						{authFetch}
-						onchange={loadRecipients}
-					/>
-					{#if smsEnabled && smsRecipients.filter((r) => r.verified).length === 0}
-						<p class="hint">Add and verify at least one number to receive SMS alerts.</p>
-					{/if}
 				</div>
 			</Card>
 		</div>

@@ -37,7 +37,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'Invalid JSON body' }, { status: 400 });
 	}
 
-	if (body.channel !== 'email' && body.channel !== 'sms') {
+	if (body.channel !== 'email') {
 		return json({ error: 'Unknown channel' }, { status: 422 });
 	}
 	if (!body.destination?.trim()) {

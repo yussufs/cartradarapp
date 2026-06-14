@@ -17,6 +17,7 @@ export interface WebhookLineItem {
 	quantity?: number | null;
 	price?: string | null;
 	line_price?: string | null;
+	variant_id?: number | null;
 	variant_title?: string | null;
 	sku?: string | null;
 }
@@ -57,11 +58,27 @@ export interface OrderWebhookPayload {
 	email?: string | null;
 	phone?: string | null;
 	contact_email?: string | null;
+	// "shopify_draft_order" when the order came from a completed draft order
+	source_name?: string | null;
+	source_identifier?: string | null;
 	customer?: {
 		id?: number | null;
 		email?: string | null;
 		phone?: string | null;
 	} | null;
+}
+
+/** draft_orders/update payload (REST draft order resource). */
+export interface DraftOrderWebhookPayload {
+	id: number;
+	admin_graphql_api_id: string;
+	name?: string | null;
+	status?: 'open' | 'invoice_sent' | 'completed' | null;
+	// Populated once the draft order completes into a real order
+	order_id?: number | null;
+	completed_at?: string | null;
+	total_price?: string | null;
+	currency?: string | null;
 }
 
 export interface AppSubscriptionWebhookPayload {

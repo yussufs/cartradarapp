@@ -27,7 +27,11 @@
 		alertedAt: string | null;
 		recoveredAt: string | null;
 		recoveredAmount: string | null;
-		recoveryMatch: 'token' | 'email' | 'phone' | null;
+		recoveryMatch: 'token' | 'email' | 'phone' | 'draft_order' | null;
+		draftOrderId: string | null;
+		draftOrderName: string | null;
+		draftOrderCreatedAt: string | null;
+		draftOrderAdminUrl: string | null;
 	}
 
 	interface AlertEntry {
@@ -91,6 +95,42 @@
 		setTimeout(() => (copied = false), 2000);
 	}
 
+	let creatingDraft = $state(false);
+	let draftError = $state('');
+
+	const canCreateDraft = $derived(
+		!!checkout &&
+			(checkout.status === 'abandoned' || checkout.status === 'alerted') &&
+			!checkout.draftOrderId
+	);
+
+	async function createDraftOrder() {
+		if (!checkout) return;
+		creatingDraft = true;
+		draftError = '';
+		try {
+			const token = await window.shopify.idToken();
+			const response = await fetch(`/api/checkouts/${checkout.id}/draft-order`, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			const data = await response.json();
+			if (!response.ok) throw new Error(data.error ?? 'Could not create the draft order');
+			checkout = {
+				...checkout,
+				draftOrderId: data.draftOrder.id,
+				draftOrderName: data.draftOrder.name,
+				draftOrderCreatedAt: new Date().toISOString(),
+				draftOrderAdminUrl: data.draftOrder.adminUrl
+			};
+			window.shopify?.toast?.show(`Draft order ${data.draftOrder.name} created`);
+		} catch (err) {
+			draftError = err instanceof Error ? err.message : 'Could not create the draft order';
+		} finally {
+			creatingDraft = false;
+		}
+	}
+
 	const statusBadge: Record<
 		CheckoutDetail['status'],
 		{ tone: 'default' | 'caution' | 'info' | 'success'; label: string }
@@ -131,6 +171,8 @@
 						was placed on {when(checkout.recoveredAt)} after the alert went out.
 						{#if checkout.recoveryMatch === 'token'}
 							Matched exactly to this checkout.
+						{:else if checkout.recoveryMatch === 'draft_order'}
+							Recovered via the draft order ({checkout.draftOrderName}) you created from this cart.
 						{:else if checkout.recoveryMatch === 'email' || checkout.recoveryMatch === 'phone'}
 							Inferred from the customer's {checkout.recoveryMatch} on a later checkout.
 						{/if}
@@ -180,6 +222,32 @@
 						<p class="info-label">Customer's checkout recovery link</p>
 						<Button onclick={copyRecoveryLink}>{copied ? 'Copied' : 'Copy link'}</Button>
 					</div>
+				{/if}
+				{#if canCreateDraft || checkout.draftOrderId}
+					<Divider />
+					<div class="recovery-row">
+						{#if checkout.draftOrderId}
+							<p class="info-label">
+								Draft order {checkout.draftOrderName} created {when(checkout.draftOrderCreatedAt)} — completing
+								it counts as a recovery.
+							</p>
+							{#if checkout.draftOrderAdminUrl}
+								<Button onclick={() => window.open(checkout!.draftOrderAdminUrl!, '_top')}>
+									Open draft order
+								</Button>
+							{/if}
+						{:else}
+							<p class="info-label">
+								Turn this cart into a draft order to finish the sale for the customer.
+							</p>
+							<Button variant="primary" onclick={createDraftOrder} loading={creatingDraft}>
+								Create draft order
+							</Button>
+						{/if}
+					</div>
+					{#if draftError}
+						<p class="draft-error">{draftError}</p>
+					{/if}
 				{/if}
 			</Card>
 
@@ -291,6 +359,12 @@
 	.subdued {
 		color: var(--p-color-text-secondary, #6d7175);
 		font-size: 13px;
+	}
+
+	.draft-error {
+		margin: 8px 0 0;
+		font-size: 13px;
+		color: var(--p-color-text-critical, #8e1f0b);
 	}
 
 	.total-cell {

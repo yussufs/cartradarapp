@@ -4,6 +4,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { authenticateRequest, AuthError } from '$lib/server/shopify/auth';
 import { db } from '$lib/server/db';
 import { alerts, checkouts } from '$lib/shared/db/schema';
+import { draftOrderAdminUrl } from '$lib/server/draft-orders';
 
 export const GET: RequestHandler = async ({ request, params }) => {
 	let shop: string;
@@ -44,5 +45,13 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		.where(eq(alerts.checkoutId, checkout.id))
 		.orderBy(desc(alerts.createdAt));
 
-	return json({ checkout, alerts: alertHistory });
+	return json({
+		checkout: {
+			...checkout,
+			draftOrderAdminUrl: checkout.draftOrderId
+				? draftOrderAdminUrl(shop, checkout.draftOrderId)
+				: null
+		},
+		alerts: alertHistory
+	});
 };

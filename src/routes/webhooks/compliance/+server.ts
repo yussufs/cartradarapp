@@ -8,8 +8,7 @@ import {
 	alertRecipients,
 	channelSettings,
 	checkouts,
-	alerts,
-	usageCharges
+	alerts
 } from '$lib/shared/db/schema';
 import { and, eq } from 'drizzle-orm';
 
@@ -74,7 +73,6 @@ export const POST: RequestHandler = async ({ request }) => {
 				console.log(`Shop redact request for ${shop} - deleting all shop data`);
 				await db.delete(alerts).where(eq(alerts.shop, shop));
 				await db.delete(checkouts).where(eq(checkouts.shop, shop));
-				await db.delete(usageCharges).where(eq(usageCharges.shop, shop));
 				await db.delete(alertRules).where(eq(alertRules.shop, shop));
 				await db.delete(alertRecipients).where(eq(alertRecipients.shop, shop));
 				await db.delete(channelSettings).where(eq(channelSettings.shop, shop));

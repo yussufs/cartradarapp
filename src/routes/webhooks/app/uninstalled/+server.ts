@@ -16,8 +16,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			.set({
 				uninstalledAt: new Date(),
 				billingActive: false,
-				billingSubscriptionId: null,
-				usageLineItemId: null
+				billingSubscriptionId: null
 			})
 			.where(eq(shops.shop, shop));
 		console.log(`Deleted sessions for ${shop}`);

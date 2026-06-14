@@ -18,7 +18,6 @@ interface SettingsBody {
 		emailEnabled: boolean;
 		slackEnabled: boolean;
 		slackWebhookUrl: string | null;
-		smsEnabled: boolean;
 	};
 }
 
@@ -65,10 +64,9 @@ export const GET: RequestHandler = async ({ request }) => {
 			? {
 					emailEnabled: channels.emailEnabled,
 					slackEnabled: channels.slackEnabled,
-					slackWebhookUrl: channels.slackWebhookUrl,
-					smsEnabled: channels.smsEnabled
+					slackWebhookUrl: channels.slackWebhookUrl
 				}
-			: { emailEnabled: true, slackEnabled: false, slackWebhookUrl: null, smsEnabled: false },
+			: { emailEnabled: true, slackEnabled: false, slackWebhookUrl: null },
 		currency: shopRow.currency ?? 'USD'
 	});
 };
@@ -142,7 +140,6 @@ export const PUT: RequestHandler = async ({ request }) => {
 		emailEnabled: !!body.channels.emailEnabled,
 		slackEnabled: !!body.channels.slackEnabled,
 		slackWebhookUrl,
-		smsEnabled: !!body.channels.smsEnabled,
 		updatedAt: new Date()
 	};
 	await db

@@ -1,16 +1,17 @@
 /**
- * Shopify Billing: a single usage-based subscription ($0 recurring, one usage
- * line item) that the merchant approves once. Each recovered cart is billed as
- * a usage record — the 1% / $1-minimum success fee.
+ * Shopify Billing: a single flat-rate recurring subscription ($29/month) that
+ * the merchant approves once to unlock the Pro plan (unlimited alerts). Shops
+ * without an active subscription are on the Free plan, capped at
+ * BILLING.freeAlertsPerMonth alerts per calendar month.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { getOfflineSession } from '$lib/server/shopify/auth';
 import { createAdmin, throwOnErrors, type AdminClient } from '$lib/server/shopify/graphql';
 import { db } from '$lib/server/db';
-import { shops, usageCharges } from '$lib/shared/db/schema';
-import { BILLING, recoveryFeeUsd } from './plans';
-import { adminAppUrl, formatMoney } from '$lib/server/alerts/format';
+import { checkouts, shops } from '$lib/shared/db/schema';
+import { BILLING, type Plan } from './plans';
+import { adminAppUrl } from '$lib/server/alerts/format';
 
 async function getOfflineAdmin(shop: string): Promise<AdminClient> {
 	return createAdmin(await getOfflineSession(shop));
@@ -28,8 +29,8 @@ function throwOnUserErrors(userErrors: UserError[] | undefined, context: string)
 }
 
 /**
- * Creates the usage-based subscription and returns the confirmation URL the
- * merchant must approve. Activation lands via app_subscriptions/update.
+ * Creates the $29/month recurring subscription and returns the confirmation URL
+ * the merchant must approve. Activation lands via app_subscriptions/update.
  */
 export async function activateBilling(shop: string): Promise<string> {
 	const admin = await getOfflineAdmin(shop);
@@ -58,12 +59,9 @@ export async function activateBilling(shop: string): Promise<string> {
 				lineItems: [
 					{
 						plan: {
-							appUsagePricingDetails: {
-								terms: `${(BILLING.feeRate * 100).toFixed(0)}% of each recovered cart's order value, $${BILLING.minFeeUsd.toFixed(2)} minimum per recovery. No monthly fee.`,
-								cappedAmount: {
-									amount: BILLING.defaultCappedAmountUsd.toFixed(2),
-									currencyCode: 'USD'
-								}
+							appRecurringPricingDetails: {
+								price: { amount: BILLING.proPriceUsd.toFixed(2), currencyCode: 'USD' },
+								interval: BILLING.interval
 							}
 						}
 					}
@@ -80,7 +78,7 @@ export async function activateBilling(shop: string): Promise<string> {
 	return data.appSubscriptionCreate.confirmationUrl;
 }
 
-/** Cancels the active subscription (merchant opts out of billing). */
+/** Cancels the active subscription (merchant downgrades to Free). */
 export async function cancelSubscription(shop: string): Promise<void> {
 	const [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
 	if (!shopRow?.billingSubscriptionId) return;
@@ -105,33 +103,27 @@ export async function cancelSubscription(shop: string): Promise<void> {
 }
 
 /**
- * Reconciles local billing state against Shopify's active subscriptions —
- * the source of truth. Stores the subscription and usage line item IDs so
- * recovery fees can be billed. Returns whether billing is active.
+ * Reconciles local billing state against Shopify's active subscriptions — the
+ * source of truth — and stores the subscription ID. Returns whether the shop
+ * has an active Pro subscription.
  *
- * Called from the app_subscriptions/update webhook, and as a fallback from
- * the billing API when the webhook was missed (e.g. delivered to another
+ * Called from the app_subscriptions/update webhook, and as a fallback from the
+ * billing API when the webhook was missed (e.g. delivered to another
  * environment during development).
  */
 export async function syncBillingState(shop: string): Promise<boolean> {
 	const admin = await getOfflineAdmin(shop);
 	const response = await admin.graphql<{
 		currentAppInstallation: {
-			activeSubscriptions: Array<{
-				id: string;
-				lineItems: Array<{ id: string; plan: { pricingDetails: { __typename: string } } }>;
-			}>;
+			activeSubscriptions: Array<{ id: string; status: string }>;
 		};
 	}>(
 		`#graphql
-		query CartRadarUsageLineItem {
+		query CartRadarSubscription {
 			currentAppInstallation {
 				activeSubscriptions {
 					id
-					lineItems {
-						id
-						plan { pricingDetails { __typename } }
-					}
+					status
 				}
 			}
 		}`
@@ -143,99 +135,51 @@ export async function syncBillingState(shop: string): Promise<boolean> {
 	if (!subscription) {
 		await db
 			.update(shops)
-			.set({ billingActive: false, billingSubscriptionId: null, usageLineItemId: null })
+			.set({ billingActive: false, billingSubscriptionId: null })
 			.where(eq(shops.shop, shop));
 		return false;
 	}
 
-	const usageLineItem = subscription.lineItems.find(
-		(item) => item.plan.pricingDetails.__typename === 'AppUsagePricing'
-	);
-
 	await db
 		.update(shops)
-		.set({
-			billingActive: true,
-			billingSubscriptionId: subscription.id,
-			usageLineItemId: usageLineItem?.id ?? null
-		})
+		.set({ billingActive: true, billingSubscriptionId: subscription.id })
 		.where(eq(shops.shop, shop));
 	return true;
 }
 
-/**
- * Bills the success fee for a recovered cart. Always writes the audit row; pushes
- * a Shopify usage record when billing is active. A cap-exceeded error is logged
- * but never blocks recovery tracking. Idempotent per recovered checkout.
- */
-export async function chargeRecovery(
-	shop: string,
-	checkoutId: string,
-	orderId: string,
-	recoveredAmount: string | null,
-	currency: string
-): Promise<void> {
-	const orderTotal = parseFloat(recoveredAmount ?? '0');
-	const amount = recoveryFeeUsd(orderTotal).toFixed(2);
-	const idempotencyKey = `recovery-${checkoutId}`;
+export interface PlanState {
+	plan: Plan;
+	/** Alerts sent this calendar month (abandoned-cart events that fired). */
+	alertsUsed: number;
+	/** Monthly alert allowance, or null when unlimited (Pro). */
+	limit: number | null;
+	/** True when a Free shop has used its full monthly allowance. */
+	limitReached: boolean;
+}
 
-	const inserted = await db
-		.insert(usageCharges)
-		.values({ shop, checkoutId, orderId, recoveredAmount, amount, idempotencyKey })
-		.onConflictDoNothing()
-		.returning({ id: usageCharges.id });
-	if (inserted.length === 0) return; // already billed for this recovery
-
-	const [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
-	if (!shopRow?.billingActive || !shopRow.usageLineItemId) {
-		console.warn(`Billing inactive for ${shop}; recovery fee $${amount} recorded but not charged`);
-		return;
-	}
-
-	try {
-		const admin = await getOfflineAdmin(shop);
-		const recovered = formatMoney(orderTotal, currency);
-		const response = await admin.graphql<{
-			appUsageRecordCreate: { userErrors: UserError[]; appUsageRecord: { id: string } | null };
-		}>(
-			`#graphql
-			mutation CartRadarRecoveryCharge(
-				$subscriptionLineItemId: ID!
-				$price: MoneyInput!
-				$description: String!
-				$idempotencyKey: String!
-			) {
-				appUsageRecordCreate(
-					subscriptionLineItemId: $subscriptionLineItemId
-					price: $price
-					description: $description
-					idempotencyKey: $idempotencyKey
-				) {
-					userErrors { field message }
-					appUsageRecord { id }
-				}
-			}`,
-			{
-				variables: {
-					subscriptionLineItemId: shopRow.usageLineItemId,
-					price: { amount, currencyCode: 'USD' },
-					description: `Recovery fee — ${recovered} cart recovered (order ${orderId})`,
-					idempotencyKey
-				}
-			}
+/** Alerts (abandoned-cart events) the shop has fired in the current calendar month. */
+async function countAlertsThisMonth(shop: string): Promise<number> {
+	const [row] = await db
+		.select({ count: sql<number>`count(*)` })
+		.from(checkouts)
+		.where(
+			and(eq(checkouts.shop, shop), sql`${checkouts.alertedAt} >= date_trunc('month', now())`)
 		);
+	return Number(row?.count ?? 0);
+}
 
-		const data = throwOnErrors(response);
-		throwOnUserErrors(data.appUsageRecordCreate.userErrors, 'appUsageRecordCreate');
+/**
+ * Resolves the shop's plan and its current monthly alert usage. Pro shops are
+ * unlimited; Free shops pause once they reach BILLING.freeAlertsPerMonth.
+ */
+export async function getPlanState(shop: string): Promise<PlanState> {
+	const [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
+	const alertsUsed = await countAlertsThisMonth(shop);
 
-		if (data.appUsageRecordCreate.appUsageRecord) {
-			await db
-				.update(usageCharges)
-				.set({ shopifyUsageRecordId: data.appUsageRecordCreate.appUsageRecord.id })
-				.where(eq(usageCharges.id, inserted[0].id));
-		}
-	} catch (err) {
-		// Most likely the usage cap was reached — recovery is already tracked, so just log
-		console.error(`Failed to push recovery fee for ${shop}:`, err);
+	if (shopRow?.billingActive) {
+		return { plan: 'pro', alertsUsed, limit: null, limitReached: false };
 	}
+
+	const limit = BILLING.freeAlertsPerMonth;
+	return { plan: 'free', alertsUsed, limit, limitReached: alertsUsed >= limit };
 }

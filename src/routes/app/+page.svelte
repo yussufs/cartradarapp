@@ -36,7 +36,13 @@
 		alertsSent: 0
 	});
 	let recent = $state<RecentCheckout[]>([]);
-	let setup = $state({ ruleConfigured: false, channelConfigured: false, billingActive: false });
+	let setup = $state({ ruleConfigured: false, channelConfigured: false });
+	let plan = $state<{
+		plan: 'free' | 'pro';
+		alertsUsed: number;
+		limit: number | null;
+		limitReached: boolean;
+	}>({ plan: 'free', alertsUsed: 0, limit: 5, limitReached: false });
 
 	onMount(async () => {
 		try {
@@ -50,6 +56,7 @@
 			kpis = data.kpis;
 			recent = data.recent;
 			setup = data.setup;
+			plan = data.plan;
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load dashboard';
 		} finally {
@@ -115,20 +122,20 @@
 						{#if !setup.ruleConfigured}
 							Set your cart value threshold so Cart Radar knows which carts matter.
 						{:else}
-							Connect at least one alert channel (email, Slack, or SMS) so alerts can reach you.
+							Connect at least one alert channel (email or Slack) so alerts can reach you.
 						{/if}
 					</p>
 				</Banner>
 			{/if}
 
-			{#if !setup.billingActive}
-				<Banner tone="warning" title="Activate billing to start recovering carts">
+			{#if plan.plan === 'free' && plan.limitReached}
+				<Banner tone="warning" title="You've hit your monthly alert limit">
 					{#snippet actions()}
-						<Button variant="primary" href="/app/billing">Activate</Button>
+						<Button variant="primary" href="/app/billing">Upgrade to Pro</Button>
 					{/snippet}
 					<p>
-						Cart Radar is free until it recovers a cart — then it's 1% of that order ($1 min).
-						Activate billing so we can alert you and track recoveries.
+						You've used all {plan.limit} alerts this month, so new alerts are paused until next month.
+						Upgrade to Pro for unlimited alerts.
 					</p>
 				</Banner>
 			{/if}

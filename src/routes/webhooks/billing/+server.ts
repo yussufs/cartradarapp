@@ -6,7 +6,7 @@ import { shops } from '$lib/shared/db/schema';
 import type { AppSubscriptionWebhookPayload } from '$lib/types/shopify-webhooks';
 import { syncBillingState } from '$lib/server/billing/subscriptions';
 
-/** Handles app_subscriptions/update and app_subscriptions/approaching_capped_amount */
+/** Handles app_subscriptions/update — flips the Pro subscription on or off. */
 export const POST: RequestHandler = async ({ request }) => {
 	const { shop, topic, payload } =
 		await authenticateWebhook<AppSubscriptionWebhookPayload>(request);
@@ -14,22 +14,16 @@ export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const subscription = payload.app_subscription;
 
-		if (topic === 'app_subscriptions/approaching_capped_amount') {
-			// Merchant is at ~90% of their usage cap — surfaced as a banner in the app.
-			console.log(`${shop} approaching usage cap on ${subscription.name}`);
-			return new Response();
-		}
-
 		if (subscription.status === 'ACTIVE') {
-			// Pull subscription + usage line item IDs from Shopify and flip billingActive
+			// Pull the subscription ID from Shopify and flip billingActive on
 			await syncBillingState(shop);
-			console.log(`${shop} billing active`);
+			console.log(`${shop} Pro subscription active`);
 		} else if (['CANCELLED', 'DECLINED', 'EXPIRED', 'FROZEN'].includes(subscription.status)) {
 			await db
 				.update(shops)
-				.set({ billingActive: false, billingSubscriptionId: null, usageLineItemId: null })
+				.set({ billingActive: false, billingSubscriptionId: null })
 				.where(eq(shops.shop, shop));
-			console.log(`${shop} billing ${subscription.status} → inactive`);
+			console.log(`${shop} Pro subscription ${subscription.status} → Free`);
 		}
 	} catch (err) {
 		console.error(`Error processing ${topic} webhook for ${shop}:`, err);

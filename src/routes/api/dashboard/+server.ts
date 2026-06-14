@@ -3,9 +3,10 @@ import type { RequestHandler } from './$types';
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { authenticateRequest, AuthError } from '$lib/server/shopify/auth';
 import { db } from '$lib/server/db';
-import { alertRules, alerts, channelSettings, checkouts, shops } from '$lib/shared/db/schema';
+import { alertRules, alerts, channelSettings, checkouts } from '$lib/shared/db/schema';
 import { ensureShopRow } from '$lib/server/checkouts';
 import { hasVerifiedRecipient } from '$lib/server/recipients';
+import { getPlanState } from '$lib/server/billing/subscriptions';
 
 const WINDOW_DAYS = 30;
 
@@ -72,7 +73,6 @@ export const GET: RequestHandler = async ({ request }) => {
 		.limit(20);
 
 	// Setup state for the onboarding checklist
-	const [shopRow] = await db.select().from(shops).where(eq(shops.shop, shop)).limit(1);
 	const [rule] = await db
 		.select({ enabled: alertRules.enabled })
 		.from(alertRules)
@@ -87,8 +87,9 @@ export const GET: RequestHandler = async ({ request }) => {
 	const hasChannel =
 		!!channels &&
 		((channels.emailEnabled && (await hasVerifiedRecipient(shop, 'email'))) ||
-			(channels.slackEnabled && !!channels.slackWebhookUrl) ||
-			(channels.smsEnabled && (await hasVerifiedRecipient(shop, 'sms'))));
+			(channels.slackEnabled && !!channels.slackWebhookUrl));
+
+	const planState = await getPlanState(shop);
 
 	return json({
 		windowDays: WINDOW_DAYS,
@@ -102,10 +103,15 @@ export const GET: RequestHandler = async ({ request }) => {
 			alertsSent: Number(alertCounts.sent)
 		},
 		recent,
+		plan: {
+			plan: planState.plan,
+			alertsUsed: planState.alertsUsed,
+			limit: planState.limit,
+			limitReached: planState.limitReached
+		},
 		setup: {
 			ruleConfigured: !!rule && rule.enabled,
-			channelConfigured: hasChannel,
-			billingActive: shopRow.billingActive
+			channelConfigured: hasChannel
 		}
 	});
 };

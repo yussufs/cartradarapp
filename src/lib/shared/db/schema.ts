@@ -66,7 +66,7 @@ export type CheckoutStatus =
 	| 'recovered' // order placed after we alerted
 	| 'completed'; // order placed without us ever alerting
 
-export type AlertChannel = 'email' | 'slack' | 'sms';
+export type AlertChannel = 'email' | 'slack';
 export type AlertStatus = 'queued' | 'sent' | 'failed';
 
 /**
@@ -74,8 +74,10 @@ export type AlertStatus = 'queued' | 'sent' | 'failed';
  * - 'token': the order carried the same checkout_token (exact)
  * - 'email' / 'phone': inferred — a later order from the same customer within
  *   the attribution window, started as a fresh checkout (different token)
+ * - 'draft_order': a draft order the merchant created from this cart in Cart
+ *   Radar was completed (exact)
  */
-export type RecoveryMatch = 'token' | 'email' | 'phone';
+export type RecoveryMatch = 'token' | 'email' | 'phone' | 'draft_order';
 
 export interface LineItemSnapshot {
 	title: string;
@@ -83,10 +85,13 @@ export interface LineItemSnapshot {
 	price: string;
 	variantTitle: string | null;
 	sku: string | null;
+	// Numeric variant ID from the checkout webhook (used to build draft orders)
+	variantId: number | null;
 }
 
 /**
- * One row per installed shop. Billing/plan state and the free-tier alert counter live here.
+ * One row per installed shop. Plan state lives here; the Free-tier monthly alert
+ * count is derived live from `checkouts.alertedAt` (see getPlanState).
  */
 export const shops = pgTable('shops', {
 	shop: text('shop').primaryKey(),
@@ -95,16 +100,16 @@ export const shops = pgTable('shops', {
 	// Days after an alert that a later order from the same customer still counts
 	// as an (inferred) recovery. Read live at order time — see markCheckoutOrdered.
 	attributionWindowDays: integer('attribution_window_days').default(14).notNull(),
-	// Single usage-based subscription: billingActive once the merchant approves it.
+	// billingActive is true once the merchant approves the $29/mo Pro subscription.
+	// Free is the default (no subscription); Pro unlocks unlimited alerts.
 	billingActive: boolean('billing_active').default(false).notNull(),
 	billingSubscriptionId: text('billing_subscription_id'),
-	usageLineItemId: text('usage_line_item_id'),
 	installedAt: timestamp('installed_at', { mode: 'date' }).defaultNow().notNull(),
 	uninstalledAt: timestamp('uninstalled_at', { mode: 'date' })
 });
 
 /**
- * Alert trigger rules. Free/Pro plans get one rule; Scale allows several.
+ * Alert trigger rules (currently one rule per shop).
  * A checkout fires a rule when totalPrice >= thresholdAmount
  * (or itemCount >= minItemCount, when set) after inactivityMinutes of no activity.
  */
@@ -131,16 +136,15 @@ export const channelSettings = pgTable('channel_settings', {
 	emailEnabled: boolean('email_enabled').default(true).notNull(),
 	slackEnabled: boolean('slack_enabled').default(false).notNull(),
 	slackWebhookUrl: text('slack_webhook_url'),
-	smsEnabled: boolean('sms_enabled').default(false).notNull(),
 	updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull()
 });
 
-export type RecipientChannel = 'email' | 'sms';
+export type RecipientChannel = 'email';
 
 /**
- * Alert recipients (email addresses and phone numbers), each verified by a
- * one-time code before it can receive alerts. We never send to an unverified
- * destination — this proves ownership and protects deliverability/compliance.
+ * Alert recipients (email addresses), each verified by a one-time code before
+ * it can receive alerts. We never send to an unverified address — this proves
+ * ownership and protects deliverability.
  */
 export const alertRecipients = pgTable(
 	'alert_recipients',
@@ -148,7 +152,7 @@ export const alertRecipients = pgTable(
 		id: uuid('id').defaultRandom().primaryKey(),
 		shop: text('shop').notNull(),
 		channel: text('channel').$type<RecipientChannel>().notNull(),
-		// Email address or E.164 phone number
+		// Email address
 		destination: text('destination').notNull(),
 		verified: boolean('verified').default(false).notNull(),
 		// Current one-time verification code (cleared once verified)
@@ -191,6 +195,11 @@ export const checkouts = pgTable(
 		recoveredOrderId: text('recovered_order_id'),
 		recoveredAmount: numeric('recovered_amount', { precision: 12, scale: 2 }),
 		recoveryMatch: text('recovery_match').$type<RecoveryMatch>(),
+		// Draft order created from this cart inside the app (merchant-initiated
+		// recovery). The draft_orders/update webhook attributes its completion.
+		draftOrderId: text('draft_order_id'),
+		draftOrderName: text('draft_order_name'),
+		draftOrderCreatedAt: timestamp('draft_order_created_at', { mode: 'date' }),
 		updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull()
 	},
 	(t) => [
@@ -219,29 +228,4 @@ export const alerts = pgTable(
 		createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull()
 	},
 	(t) => [index('alerts_shop_created_idx').on(t.shop, t.createdAt)]
-);
-
-/**
- * Recovery fees billed to Shopify. One row per recovered cart (the success fee
- * = 1% of the order, $1 minimum). shopifyUsageRecordId is null when the fee was
- * recorded but not yet pushed (billing not active, or usage cap reached).
- */
-export const usageCharges = pgTable(
-	'usage_charges',
-	{
-		id: uuid('id').defaultRandom().primaryKey(),
-		shop: text('shop').notNull(),
-		checkoutId: uuid('checkout_id'),
-		orderId: text('order_id'),
-		recoveredAmount: numeric('recovered_amount', { precision: 12, scale: 2 }),
-		// The fee we charge (max(1% of order, $1))
-		amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
-		idempotencyKey: text('idempotency_key').notNull(),
-		shopifyUsageRecordId: text('shopify_usage_record_id'),
-		createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull()
-	},
-	(t) => [
-		uniqueIndex('usage_charges_idempotency_idx').on(t.idempotencyKey),
-		index('usage_charges_shop_created_idx').on(t.shop, t.createdAt)
-	]
 );

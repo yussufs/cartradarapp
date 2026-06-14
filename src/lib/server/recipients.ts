@@ -1,28 +1,22 @@
 /**
- * Alert recipient management: add an email/phone, send it a one-time
+ * Alert recipient management: add an email address, send it a one-time
  * verification code, confirm the code, and look up verified destinations.
  *
- * Nothing is ever sent to an unverified destination — this proves the merchant
- * owns the address/number (deliverability for email, consent for SMS).
+ * Nothing is ever sent to an unverified address — this proves the merchant
+ * owns it (and protects deliverability).
  */
 import crypto from 'crypto';
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { alertRecipients, type RecipientChannel } from '$lib/shared/db/schema';
 import { ensureShopRow } from '$lib/server/checkouts';
-import {
-	isEmailConfigured,
-	isSmsConfigured,
-	sendEmail,
-	sendSms
-} from '$lib/server/alerts/channels';
+import { isEmailConfigured, sendEmail } from '$lib/server/alerts/channels';
 
 const CODE_TTL_MS = 15 * 60 * 1000; // codes expire after 15 minutes
 const RESEND_COOLDOWN_MS = 30 * 1000; // at most one code every 30 seconds
 const MAX_ATTEMPTS = 5; // wrong-code attempts before a resend is required
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_RE = /^\+[1-9]\d{6,14}$/;
 
 export type RecipientRow = typeof alertRecipients.$inferSelect;
 
@@ -64,46 +58,26 @@ function toView(row: RecipientRow): RecipientView {
 	};
 }
 
-function normalize(channel: RecipientChannel, raw: string): string {
-	const value = raw.trim();
-	if (channel === 'email') {
-		const lowered = value.toLowerCase();
-		if (!EMAIL_RE.test(lowered)) throw new RecipientError('Enter a valid email address');
-		return lowered;
-	}
-	const phone = value.replace(/[\s()-]/g, '');
-	if (!PHONE_RE.test(phone)) {
-		throw new RecipientError('Enter a phone number in international format, e.g. +15551234567');
-	}
-	return phone;
+function normalize(raw: string): string {
+	const lowered = raw.trim().toLowerCase();
+	if (!EMAIL_RE.test(lowered)) throw new RecipientError('Enter a valid email address');
+	return lowered;
 }
 
-async function sendVerificationCode(
-	channel: RecipientChannel,
-	destination: string,
-	code: string
-): Promise<void> {
-	if (channel === 'email') {
-		if (!isEmailConfigured()) {
-			throw new RecipientError('Email sending is not configured on the server yet', 503);
-		}
-		await sendEmail([destination], {
-			subject: `Your Cart Radar verification code is ${code}`,
-			text: `Your Cart Radar verification code is ${code}. It expires in 15 minutes.`,
-			html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:24px;">
-				<p style="font-size:14px;color:#6d7175;margin:0 0 8px;">Cart Radar verification</p>
-				<p style="margin:0 0 16px;">Use this code to confirm <strong>${destination}</strong> for cart alerts:</p>
-				<p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:0;">${code}</p>
-				<p style="font-size:13px;color:#6d7175;margin:16px 0 0;">This code expires in 15 minutes. If you didn't request it, you can ignore this email.</p>
-			</div>`
-		});
-		return;
+async function sendVerificationCode(destination: string, code: string): Promise<void> {
+	if (!isEmailConfigured()) {
+		throw new RecipientError('Email sending is not configured on the server yet', 503);
 	}
-
-	if (!isSmsConfigured()) {
-		throw new RecipientError('SMS sending is not configured on the server yet', 503);
-	}
-	await sendSms(destination, `Cart Radar verification code: ${code} (expires in 15 minutes)`);
+	await sendEmail([destination], {
+		subject: `Your Cart Radar verification code is ${code}`,
+		text: `Your Cart Radar verification code is ${code}. It expires in 15 minutes.`,
+		html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:24px;">
+			<p style="font-size:14px;color:#6d7175;margin:0 0 8px;">Cart Radar verification</p>
+			<p style="margin:0 0 16px;">Use this code to confirm <strong>${destination}</strong> for cart alerts:</p>
+			<p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:0;">${code}</p>
+			<p style="font-size:13px;color:#6d7175;margin:16px 0 0;">This code expires in 15 minutes. If you didn't request it, you can ignore this email.</p>
+		</div>`
+	});
 }
 
 export async function listRecipients(shop: string): Promise<RecipientView[]> {
@@ -149,7 +123,7 @@ export async function addRecipient(
 	channel: RecipientChannel,
 	rawDestination: string
 ): Promise<RecipientView> {
-	const destination = normalize(channel, rawDestination);
+	const destination = normalize(rawDestination);
 	await ensureShopRow(shop);
 
 	const [existing] = await db
@@ -181,7 +155,7 @@ export async function addRecipient(
 	};
 
 	// Send before persisting so a send failure doesn't leave a dangling code
-	await sendVerificationCode(channel, destination, code);
+	await sendVerificationCode(destination, code);
 
 	if (existing) {
 		const [updated] = await db

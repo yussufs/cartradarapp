@@ -3,17 +3,17 @@
 
 	interface RecipientView {
 		id: string;
-		channel: 'email' | 'sms';
+		channel: 'email';
 		destination: string;
 		verified: boolean;
 		canResend: boolean;
 	}
 
 	interface Props {
-		channel: 'email' | 'sms';
+		channel: 'email';
 		recipients: RecipientView[];
 		disabled?: boolean;
-		inputType?: 'email' | 'tel' | 'text';
+		inputType?: 'email' | 'text';
 		placeholder?: string;
 		authFetch: (path: string, init?: RequestInit) => Promise<Response>;
 		onchange: () => Promise<void> | void;
@@ -132,7 +132,7 @@
 		<!-- keydown bubbles up from the inner input so Enter submits -->
 		<div class="add-input" onkeydown={onAddKeydown} role="presentation">
 			<TextField
-				label="Add {channel === 'email' ? 'an email address' : 'a phone number'}"
+				label="Add an email address"
 				labelHidden
 				name="add-{channel}"
 				type={inputType}

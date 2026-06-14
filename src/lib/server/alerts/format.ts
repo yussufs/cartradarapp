@@ -1,6 +1,6 @@
 /**
- * Builds the merchant-facing alert content (email HTML, SMS body, Slack blocks)
- * from a tracked checkout snapshot.
+ * Builds the merchant-facing alert content (email HTML, Slack blocks) from a
+ * tracked checkout snapshot.
  */
 import { env } from '$env/dynamic/private';
 import type { checkouts } from '$lib/shared/db/schema';
@@ -11,7 +11,6 @@ export interface AlertContent {
 	subject: string;
 	html: string;
 	text: string;
-	sms: string;
 	slackPayload: Record<string, unknown>;
 }
 
@@ -117,11 +116,6 @@ export function buildAlertContent(checkout: CheckoutRow): AlertContent {
 </body>
 </html>`;
 
-	// Keep SMS to one segment — every extra segment is separately billable, so we
-	// drop the contact details (they're in the email/app) and clamp to 160 chars.
-	const smsRaw = `Cart Radar: ${total} cart abandoned by ${customer} (${checkout.itemCount} items). See email/app for details.`;
-	const sms = smsRaw.length > 160 ? `${smsRaw.slice(0, 157)}...` : smsRaw;
-
 	const slackPayload = {
 		text: `${total} cart abandoned by ${customer} on ${checkout.shop}`,
 		blocks: [
@@ -170,7 +164,7 @@ export function buildAlertContent(checkout: CheckoutRow): AlertContent {
 		]
 	};
 
-	return { subject, html, text, sms, slackPayload };
+	return { subject, html, text, slackPayload };
 }
 
 function escapeHtml(value: string): string {
