@@ -35,7 +35,35 @@ pnpm run dev              # Start dev server
 pnpm run db:push          # Push database schema
 pnpm run graphql-codegen  # Generate GraphQL types
 shopify app dev           # Start with Shopify CLI (recommended)
+pnpm run dev:tunnel       # Start with the stable Cloudflare named tunnel
 ```
+
+## Local Dev Gotcha: Cloudflare caches the dev tunnel's JS
+
+`pnpm run dev:tunnel` serves the app through a Cloudflare-proxied `*-dev.dragonapps.io`
+hostname. Cloudflare applies a **4-hour Browser Cache TTL to every `.js`** by default —
+including SvelteKit's `.svelte-kit/generated/client/app.js` route manifest, whose URL is
+stable but whose contents change whenever the route tree changes.
+
+**Symptoms** (all the same bug, after adding/renaming/removing a route):
+
+- `TypeError: loader is not a function` + a **500 on the newest route**, or
+- a route silently renders a **different route's page** (e.g. `/app/onboarding` showing
+  the settings page — node indices shifted but the browser kept the stale manifest), or
+- HMR edits simply don't appear.
+
+It survives normal reloads (the browser honors the 4h `max-age`) and leaves **no server
+logs** — it's a client-side hydration error in the embedded iframe. If a route "works in
+a fresh/headless browser but not yours," it's this.
+
+**Permanent fix** (Cloudflare dashboard, `dragonapps.io` zone, one-time):
+
+1. Caching → Configuration → Browser Cache TTL → **Respect Existing Headers**
+2. Caching → Cache Rules → new rule: `ends_with(http.host, "-dev.dragonapps.io")` →
+   **Bypass cache**
+
+**Right now** (stale page in front of you): DevTools → Network → **Disable cache** →
+reload (applies to the app iframe too), or Cloudflare → **Purge Everything** once.
 
 ## MCP Servers
 

@@ -11,6 +11,36 @@
 #                      Shopify CLI proxy listens on). MUST NOT be 3457 — that's
 #                      the CLI's internal default (GraphiQL), and reusing it
 #                      causes "EADDRINUSE 3457".
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# GOTCHA: stale JS in the embedded app (Cloudflare caches the tunnel)
+# ─────────────────────────────────────────────────────────────────────────────
+# The *-dev.dragonapps.io tunnel hostname is proxied through Cloudflare, which
+# by default slaps a 4-hour Browser Cache TTL (cache-control: max-age=14400) on
+# anything ending in .js — INCLUDING SvelteKit's .svelte-kit/generated/client/
+# app.js route manifest. That manifest's URL never changes but its contents do
+# every time you add/rename/remove a route.
+#
+# Symptoms (all the SAME bug, after editing the route tree):
+#   • "TypeError: loader is not a function" + a 500 on the newest route, OR
+#   • one route silently renders a DIFFERENT route's page (e.g. /app/onboarding
+#     showing the settings page — node indices shifted but the browser kept the
+#     old manifest), OR
+#   • HMR edits just don't show up.
+# It survives normal reloads because the browser honors the 4h max-age.
+# Server logs stay clean — it's a client-side hydration error.
+#
+# PERMANENT FIX (Cloudflare dashboard, dragonapps.io zone — do once):
+#   1. Caching → Configuration → Browser Cache TTL → "Respect Existing Headers".
+#   2. Caching → Cache Rules → new rule:
+#        When:  ends_with(http.host, "-dev.dragonapps.io")
+#        Then:  Bypass cache
+#   Result: dev .js comes back as cf-cache-status: BYPASS / cache-control:
+#   no-cache, so route + HMR changes show up instantly.
+#
+# RIGHT NOW (if you're staring at a stale page): DevTools → Network →
+# "Disable cache" → reload (applies to the app iframe too), or CF → Purge
+# Everything once.
 set -euo pipefail
 
 TUNNEL_NAME="${DEV_TUNNEL_NAME:-cartradar-dev}"
