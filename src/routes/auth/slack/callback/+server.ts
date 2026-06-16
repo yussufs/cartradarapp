@@ -16,8 +16,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	const state = url.searchParams.get('state');
 	const oauthError = url.searchParams.get('error');
 
-	const shop = state ? verifyState(state) : null;
-	if (!shop) {
+	const verified = state ? verifyState(state) : null;
+	if (!verified) {
 		// Can't trust which shop this is — refuse rather than guess.
 		return new Response(
 			'Invalid or expired Slack authorization. Please try connecting again from the app.',
@@ -25,7 +25,8 @@ export const GET: RequestHandler = async ({ url }) => {
 		);
 	}
 
-	const settingsUrl = adminAppUrl(shop, '/app/settings');
+	const { shop, returnTo } = verified;
+	const settingsUrl = adminAppUrl(shop, returnTo);
 
 	// Merchant denied, or Slack returned an error.
 	if (oauthError || !code) {

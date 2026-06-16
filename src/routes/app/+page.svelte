@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import {
 		Page,
 		Card,
@@ -57,6 +58,18 @@
 			recent = data.recent;
 			setup = data.setup;
 			plan = data.plan;
+
+			// Steer new installs into the guided setup, unless they chose to skip it.
+			let skipped = false;
+			try {
+				skipped = sessionStorage.getItem('cr_onboarding_skipped') === '1';
+			} catch {
+				/* best effort */
+			}
+			if ((!data.setup.ruleConfigured || !data.setup.channelConfigured) && !skipped) {
+				goto('/app/onboarding');
+				return;
+			}
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load dashboard';
 		} finally {
@@ -116,7 +129,7 @@
 			{#if needsSetup}
 				<Banner tone="info" title="Finish setting up Cart Radar">
 					{#snippet actions()}
-						<Button variant="primary" href="/app/settings">Open settings</Button>
+						<Button variant="primary" href="/app/onboarding">Finish setup</Button>
 					{/snippet}
 					<p>
 						{#if !setup.ruleConfigured}

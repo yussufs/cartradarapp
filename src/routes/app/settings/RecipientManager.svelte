@@ -33,14 +33,18 @@
 	// reconcile with the server list whenever the parent reloads.
 	let items = $state<RecipientView[]>([]);
 	$effect(() => {
-		items = recipients;
+		items = Array.isArray(recipients) ? recipients : [];
 	});
 
 	// While any address is still pending, poll so it flips to Confirmed shortly
 	// after the recipient clicks the link (which happens in their own inbox/tab).
 	$effect(() => {
 		if (!items.some((r) => !r.verified)) return;
-		const timer = setInterval(() => onchange(), 4000);
+		const timer = setInterval(() => {
+			Promise.resolve(onchange()).catch(() => {
+				// Keep polling best-effort; the parent load path surfaces real errors.
+			});
+		}, 4000);
 		return () => clearInterval(timer);
 	});
 
@@ -51,6 +55,25 @@
 	let rowBusy = $state<Record<string, boolean>>({});
 	let rowError = $state<Record<string, string>>({});
 	let rowNotice = $state<Record<string, string>>({});
+
+	type ApiObject = Record<string, unknown>;
+
+	function isObject(value: unknown): value is ApiObject {
+		return value !== null && typeof value === 'object' && !Array.isArray(value);
+	}
+
+	async function readJson(response: Response): Promise<unknown> {
+		try {
+			return await response.json();
+		} catch {
+			return null;
+		}
+	}
+
+	function responseError(value: unknown, fallback: string): string {
+		if (!isObject(value) || typeof value.error !== 'string') return fallback;
+		return value.error;
+	}
 
 	async function add() {
 		const dest = newDestination.trim();
@@ -72,11 +95,11 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ channel, destination: dest })
 			});
-			const data = await response.json();
+			const data = await readJson(response);
 			if (!response.ok) {
 				items = items.filter((i) => i.id !== tempId);
 				newDestination = dest;
-				addError = data.error ?? 'Could not add that recipient.';
+				addError = responseError(data, 'Could not add that recipient.');
 				return;
 			}
 			await onchange(); // reload replaces the temp row with the real one
@@ -95,9 +118,9 @@
 		rowNotice[id] = '';
 		try {
 			const response = await authFetch(`/api/recipients/${id}`, { method: 'POST' });
-			const data = await response.json();
+			const data = await readJson(response);
 			if (!response.ok) {
-				rowError[id] = data.error ?? 'Could not resend the link.';
+				rowError[id] = responseError(data, 'Could not resend the link.');
 				return;
 			}
 			rowNotice[id] = 'A fresh confirmation link is on its way.';

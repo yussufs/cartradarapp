@@ -33,7 +33,13 @@ export type CartRadarSubscriptionPeriodEndQuery = { node?: AdminTypes.Maybe<Pick
 export type CartRadarSubscriptionQueryVariables = AdminTypes.Exact<{ [key: string]: never; }>;
 
 
-export type CartRadarSubscriptionQuery = { currentAppInstallation: { activeSubscriptions: Array<Pick<AdminTypes.AppSubscription, 'id' | 'status'>> } };
+export type CartRadarSubscriptionQuery = { currentAppInstallation: { activeSubscriptions: Array<(
+      Pick<AdminTypes.AppSubscription, 'id' | 'status'>
+      & { lineItems: Array<{ plan: { pricingDetails: (
+            { __typename: 'AppRecurringPricing' }
+            & Pick<AdminTypes.AppRecurringPricing, 'interval'>
+          ) | { __typename: 'AppUsagePricing' } } }> }
+    )> } };
 
 export type DevSeedProductsQueryVariables = AdminTypes.Exact<{
   count: AdminTypes.Scalars['Int']['input'];
@@ -59,7 +65,7 @@ export type CartRadarShopProfileQuery = { shop: Pick<AdminTypes.Shop, 'name' | '
 
 interface GeneratedQueryTypes {
   "#graphql\n\t\t\t\tquery CartRadarSubscriptionPeriodEnd($id: ID!) {\n\t\t\t\t\tnode(id: $id) {\n\t\t\t\t\t\t... on AppSubscription {\n\t\t\t\t\t\t\tcurrentPeriodEnd\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}": {return: CartRadarSubscriptionPeriodEndQuery, variables: CartRadarSubscriptionPeriodEndQueryVariables},
-  "#graphql\n\t\tquery CartRadarSubscription {\n\t\t\tcurrentAppInstallation {\n\t\t\t\tactiveSubscriptions {\n\t\t\t\t\tid\n\t\t\t\t\tstatus\n\t\t\t\t}\n\t\t\t}\n\t\t}": {return: CartRadarSubscriptionQuery, variables: CartRadarSubscriptionQueryVariables},
+  "#graphql\n\t\tquery CartRadarSubscription {\n\t\t\tcurrentAppInstallation {\n\t\t\t\tactiveSubscriptions {\n\t\t\t\t\tid\n\t\t\t\t\tstatus\n\t\t\t\t\tlineItems {\n\t\t\t\t\t\tplan {\n\t\t\t\t\t\t\tpricingDetails {\n\t\t\t\t\t\t\t\t__typename\n\t\t\t\t\t\t\t\t... on AppRecurringPricing {\n\t\t\t\t\t\t\t\t\tinterval\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}": {return: CartRadarSubscriptionQuery, variables: CartRadarSubscriptionQueryVariables},
   "#graphql\n\t\tquery DevSeedProducts($count: Int!) {\n\t\t\tproducts(first: $count, query: \"status:active\") {\n\t\t\t\tnodes {\n\t\t\t\t\ttitle\n\t\t\t\t\tvariants(first: 1) {\n\t\t\t\t\t\tnodes {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\ttitle\n\t\t\t\t\t\t\tprice\n\t\t\t\t\t\t\tsku\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}": {return: DevSeedProductsQuery, variables: DevSeedProductsQueryVariables},
   "#graphql\n\t\t\tquery CartRadarShopProfile {\n\t\t\t\tshop {\n\t\t\t\t\tname\n\t\t\t\t\tcurrencyCode\n\t\t\t\t}\n\t\t\t}": {return: CartRadarShopProfileQuery, variables: CartRadarShopProfileQueryVariables},
 }

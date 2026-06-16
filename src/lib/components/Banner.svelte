@@ -77,8 +77,9 @@
 <style>
 	.banner {
 		display: flex;
-		gap: var(--space-300);
-		padding: var(--space-400);
+		align-items: flex-start;
+		gap: var(--space-200);
+		padding: var(--space-300);
 		background: var(--color-bg-surface);
 		border-radius: var(--radius-lg);
 		border-left: 4px solid var(--color-border);
@@ -123,6 +124,10 @@
 
 	.banner-icon {
 		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		/* match the message line-height so the icon centers on the first line */
+		height: var(--line-height-500);
 		color: var(--color-text-secondary);
 	}
 
@@ -135,12 +140,24 @@
 
 	.banner-title {
 		font-weight: var(--font-weight-semibold);
+		line-height: var(--line-height-500);
 		margin: 0;
 	}
 
 	.banner-message {
 		font-size: var(--font-size-md);
+		line-height: var(--line-height-500);
 		color: var(--color-text);
+	}
+
+	/* Callers pass block elements (<p>, <ul>) whose default margins would push
+	   the text off-center from the icon and inflate the banner height. */
+	.banner-message > :global(:first-child) {
+		margin-top: 0;
+	}
+
+	.banner-message > :global(:last-child) {
+		margin-bottom: 0;
 	}
 
 	.banner-actions {
@@ -156,6 +173,8 @@
 		justify-content: center;
 		width: 28px;
 		height: 28px;
+		/* center the button on the first line of text */
+		margin: calc((var(--line-height-500) - 28px) / 2) 0;
 		padding: 0;
 		background: transparent;
 		border: none;

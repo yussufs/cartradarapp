@@ -10,6 +10,7 @@ async function shopFromRequest(request: Request) {
 		return { shop: session.shop, response: null };
 	} catch (err) {
 		const status = err instanceof AuthError ? 401 : 500;
+		if (status === 500) console.error('Unexpected auth error on /api/recipients:', err);
 		return {
 			shop: null,
 			response: json(

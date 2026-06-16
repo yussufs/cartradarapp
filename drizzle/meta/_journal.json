@@ -15,6 +15,13 @@
 			"when": 1781429888228,
 			"tag": "0001_medical_juggernaut",
 			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "7",
+			"when": 1781570908670,
+			"tag": "0002_daffy_enchantress",
+			"breakpoints": true
 		}
 	]
 }

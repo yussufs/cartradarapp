@@ -9,10 +9,21 @@
 
 	let plan = $state<'free' | 'pro'>('free');
 	let subscriptionActive = $state(false);
+	let interval = $state<'monthly' | 'annual' | null>(null);
 	let proUntil = $state<string | null>(null);
 	// Pro purely via the post-cancel grace window (no active paying subscription).
 	const inGrace = $derived(plan === 'pro' && !subscriptionActive);
-	let pricing = $state({ proPriceUsd: 29, freeAlertsPerMonth: 5 });
+	let pricing = $state({
+		proPriceUsd: 29,
+		proYearlyUsd: 228,
+		proYearlyPerMonthUsd: 19,
+		freeAlertsPerMonth: 5
+	});
+	// Which interval the merchant is choosing when upgrading. Default to yearly.
+	let selectedInterval = $state<'monthly' | 'annual'>('annual');
+	const yearlySavingsPercent = $derived(
+		Math.round((1 - pricing.proYearlyUsd / (pricing.proPriceUsd * 12)) * 100)
+	);
 	let alerts = $state<{ used: number; limit: number | null; limitReached: boolean }>({
 		used: 0,
 		limit: 5,
@@ -36,6 +47,7 @@
 			const data = await response.json();
 			plan = data.plan;
 			subscriptionActive = data.subscriptionActive;
+			interval = data.interval;
 			proUntil = data.proUntil;
 			pricing = data.pricing;
 			alerts = data.alerts;
@@ -57,7 +69,7 @@
 			const response = await authFetch('/api/billing', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ action: 'activate' })
+				body: JSON.stringify({ action: 'activate', interval: selectedInterval })
 			});
 			const data = await response.json();
 			if (!response.ok) {
@@ -188,9 +200,51 @@
 					</div>
 					<div class="plan-col" class:current={plan === 'pro'}>
 						<p class="plan-name">Pro</p>
-						<p class="plan-price">
-							{money(pricing.proPriceUsd, 'USD')}<span class="per">/mo</span>
-						</p>
+
+						{#if plan === 'pro' && subscriptionActive}
+							{#if interval === 'annual'}
+								<p class="plan-price">
+									{money(pricing.proYearlyPerMonthUsd, 'USD')}<span class="per">/mo</span>
+								</p>
+								<p class="price-note">Billed yearly ({money(pricing.proYearlyUsd, 'USD')})</p>
+							{:else}
+								<p class="plan-price">
+									{money(pricing.proPriceUsd, 'USD')}<span class="per">/mo</span>
+								</p>
+								<p class="price-note">Billed monthly</p>
+							{/if}
+						{:else}
+							<div class="interval-toggle" role="group" aria-label="Billing interval">
+								<button
+									type="button"
+									class:active={selectedInterval === 'monthly'}
+									onclick={() => (selectedInterval = 'monthly')}
+								>
+									Monthly
+								</button>
+								<button
+									type="button"
+									class:active={selectedInterval === 'annual'}
+									onclick={() => (selectedInterval = 'annual')}
+								>
+									Yearly{#if yearlySavingsPercent > 0}<span class="save"
+											>Save {yearlySavingsPercent}%</span
+										>{/if}
+								</button>
+							</div>
+							{#if selectedInterval === 'annual'}
+								<p class="plan-price">
+									{money(pricing.proYearlyPerMonthUsd, 'USD')}<span class="per">/mo</span>
+								</p>
+								<p class="price-note">Billed yearly ({money(pricing.proYearlyUsd, 'USD')})</p>
+							{:else}
+								<p class="plan-price">
+									{money(pricing.proPriceUsd, 'USD')}<span class="per">/mo</span>
+								</p>
+								<p class="price-note">Billed monthly</p>
+							{/if}
+						{/if}
+
 						<ul class="plan-points">
 							<li><strong>Unlimited</strong> alerts</li>
 							<li>Email &amp; Slack alerts</li>
@@ -201,9 +255,7 @@
 						{:else if inGrace}
 							<Button variant="primary" loading={working} onclick={upgrade}>Resubscribe</Button>
 						{:else}
-							<Button variant="primary" loading={working} onclick={upgrade}>
-								Upgrade to Pro — {money(pricing.proPriceUsd, 'USD')}/mo
-							</Button>
+							<Button variant="primary" loading={working} onclick={upgrade}>Upgrade to Pro</Button>
 						{/if}
 					</div>
 				</div>
@@ -290,6 +342,50 @@
 	.muted {
 		font-size: 13px;
 		color: var(--p-color-text-secondary, #6d7175);
+	}
+
+	.price-note {
+		margin: 2px 0 0;
+		font-size: 13px;
+		color: var(--p-color-text-secondary, #6d7175);
+	}
+
+	.interval-toggle {
+		display: inline-flex;
+		gap: 2px;
+		padding: 2px;
+		border: 1px solid var(--p-color-border, #e3e3e3);
+		border-radius: 10px;
+		background: var(--p-color-bg-surface-secondary, #f6f6f7);
+	}
+
+	.interval-toggle button {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		border: none;
+		background: transparent;
+		padding: 6px 12px;
+		border-radius: 8px;
+		font-size: 13px;
+		font-weight: 550;
+		cursor: pointer;
+		color: var(--p-color-text-secondary, #6d7175);
+	}
+
+	.interval-toggle button.active {
+		background: var(--p-color-bg-surface, #ffffff);
+		color: var(--p-color-text, #202223);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+	}
+
+	.save {
+		font-size: 11px;
+		font-weight: 650;
+		color: var(--p-color-text-success, #047b41);
+		background: var(--p-color-bg-success-subdued, #e3f1df);
+		padding: 1px 6px;
+		border-radius: 6px;
 	}
 
 	.plan-points {

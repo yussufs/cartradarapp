@@ -69,9 +69,12 @@ export const GET: RequestHandler = async ({ request }) => {
 	return json({
 		plan: plan.plan,
 		subscriptionActive: plan.subscriptionActive,
+		interval: plan.interval,
 		proUntil: plan.proUntil ? plan.proUntil.toISOString() : null,
 		pricing: {
 			proPriceUsd: BILLING.proPriceUsd,
+			proYearlyUsd: BILLING.proYearlyUsd,
+			proYearlyPerMonthUsd: BILLING.proYearlyPerMonthUsd,
 			freeAlertsPerMonth: BILLING.freeAlertsPerMonth
 		},
 		alerts: {
@@ -92,7 +95,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { shop, response } = await authenticate(request);
 	if (!shop) return response!;
 
-	let body: { action?: string };
+	let body: { action?: string; interval?: string };
 	try {
 		body = await request.json();
 	} catch {
@@ -103,7 +106,8 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	try {
 		if (body.action === 'activate') {
-			const confirmationUrl = await activateBilling(shop);
+			const interval = body.interval === 'annual' ? 'annual' : 'monthly';
+			const confirmationUrl = await activateBilling(shop, interval);
 			return json({ confirmationUrl });
 		}
 		if (body.action === 'cancel') {

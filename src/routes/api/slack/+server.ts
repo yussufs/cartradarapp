@@ -31,7 +31,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { shop, response } = await authenticate(request);
 	if (!shop) return response!;
 
-	let body: { action?: string };
+	let body: { action?: string; returnTo?: string };
 	try {
 		body = await request.json();
 	} catch {
@@ -42,7 +42,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (!isSlackConfigured()) {
 			return json({ error: 'Slack is not configured on the server' }, { status: 503 });
 		}
-		return json({ url: buildAuthorizeUrl(shop) });
+		// returnTo is validated against an allowlist inside buildAuthorizeUrl.
+		return json({ url: buildAuthorizeUrl(shop, body.returnTo ?? '/app/settings') });
 	}
 
 	if (body.action === 'disconnect') {

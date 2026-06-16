@@ -1,4 +1,4 @@
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { building } from '$app/environment';
 import { authenticateRequest, getShopFromRequest, AuthError } from '$lib/server/shopify/auth';
 import { shopify } from '$lib/server/shopify';
@@ -36,7 +36,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 				// A stale/expired App Bridge session token is expected and self-healing:
 				// XHRs retry via the header below; document loads fall through and App
 				// Bridge re-bootstraps. Log it quietly so genuine auth failures stand out.
-				if (err instanceof Error && err.name === 'InvalidJwtError') {
+				if (err instanceof AuthError && err.code === 'invalid_session_token') {
 					console.warn(
 						`Stale session token (${authHeader ? 'XHR — will retry' : 'document — App Bridge will re-bootstrap'})`
 					);
@@ -74,6 +74,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	return resolve(event);
+};
+
+// Surfaces any *thrown* server error (load/render/endpoint) with its stack —
+// returned 500s (e.g. from auth helpers) are logged at their own site.
+export const handleError: HandleServerError = ({ error, event, status, message }) => {
+	console.error(`Unhandled ${status} on ${event.url.pathname}:`, error);
+	return { message };
 };
 
 function isPublicRoute(pathname: string): boolean {

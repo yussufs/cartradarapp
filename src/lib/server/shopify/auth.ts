@@ -26,7 +26,16 @@ export async function authenticateRequest(request: Request, idToken?: string): P
 		}
 		token = authHeader.substring(7);
 	}
-	const payload = await shopify.api.session.decodeSessionToken(token);
+
+	let payload: Awaited<ReturnType<typeof shopify.api.session.decodeSessionToken>>;
+	try {
+		payload = await shopify.api.session.decodeSessionToken(token);
+	} catch {
+		// Expired/invalid App Bridge token. Surface as an AuthError so API callers
+		// respond 401 + the retry header (prompting App Bridge to retry with a
+		// fresh token) instead of a 500, which the client can't recover from.
+		throw new AuthError('invalid_session_token', 'Invalid or expired session token');
+	}
 	const shop = payload.dest.replace('https://', '');
 	const sessionId = getOfflineSessionId(shop);
 

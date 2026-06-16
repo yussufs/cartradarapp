@@ -26,6 +26,7 @@ async function authenticate(request: Request) {
 		return { shop: session.shop, response: null };
 	} catch (err) {
 		const status = err instanceof AuthError ? 401 : 500;
+		if (status === 500) console.error('Unexpected auth error on /api/settings:', err);
 		return {
 			shop: null,
 			response: json(

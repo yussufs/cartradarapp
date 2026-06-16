@@ -40,16 +40,27 @@ function hmac(payload: string): string {
 	return crypto.createHmac('sha256', signingKey()).update(payload).digest('base64url');
 }
 
+// In-app pages we allow the OAuth flow to return to (avoids open-redirect risk).
+const RETURN_PATHS = new Set(['/app/settings', '/app/onboarding']);
+function safeReturnPath(path: string | undefined): string {
+	return path && RETURN_PATHS.has(path) ? path : '/app/settings';
+}
+
 /** Signs an opaque, tamper-proof state that pins this OAuth flow to one shop. */
-export function signState(shop: string): string {
+export function signState(shop: string, returnTo: string): string {
 	const payload = Buffer.from(
-		JSON.stringify({ shop, nonce: crypto.randomBytes(8).toString('hex'), iat: Date.now() })
+		JSON.stringify({
+			shop,
+			returnTo: safeReturnPath(returnTo),
+			nonce: crypto.randomBytes(8).toString('hex'),
+			iat: Date.now()
+		})
 	).toString('base64url');
 	return `${payload}.${hmac(payload)}`;
 }
 
-/** Returns the shop if the state is authentic and unexpired, else null. */
-export function verifyState(state: string): string | null {
+/** Returns the shop + return path if the state is authentic and unexpired, else null. */
+export function verifyState(state: string): { shop: string; returnTo: string } | null {
 	const [payload, sig] = state.split('.');
 	if (!payload || !sig) return null;
 
@@ -65,18 +76,18 @@ export function verifyState(state: string): string | null {
 		const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
 		if (typeof data.shop !== 'string' || typeof data.iat !== 'number') return null;
 		if (Date.now() - data.iat > STATE_TTL_MS) return null;
-		return data.shop;
+		return { shop: data.shop, returnTo: safeReturnPath(data.returnTo) };
 	} catch {
 		return null;
 	}
 }
 
-export function buildAuthorizeUrl(shop: string): string {
+export function buildAuthorizeUrl(shop: string, returnTo: string): string {
 	const params = new URLSearchParams({
 		client_id: env.SLACK_CLIENT_ID ?? '',
 		scope: 'incoming-webhook',
 		redirect_uri: slackRedirectUri(),
-		state: signState(shop)
+		state: signState(shop, returnTo)
 	});
 	return `https://slack.com/oauth/v2/authorize?${params.toString()}`;
 }

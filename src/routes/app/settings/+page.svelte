@@ -11,6 +11,8 @@
 		canResend: boolean;
 	}
 
+	type ApiObject = Record<string, unknown>;
+
 	let isLoading = $state(true);
 	let saving = $state(false);
 	let testing = $state(false);
@@ -39,6 +41,7 @@
 	// Recipients (managed independently of the form save)
 	let recipients = $state<RecipientView[]>([]);
 	const emailRecipients = $derived(recipients.filter((r) => r.channel === 'email'));
+	const confirmedEmailCount = $derived(emailRecipients.filter((r) => r.verified).length);
 
 	let currency = $state('USD');
 
@@ -58,7 +61,71 @@
 		{ label: '90 days', value: '90' }
 	];
 
+	function isObject(value: unknown): value is ApiObject {
+		return value !== null && typeof value === 'object' && !Array.isArray(value);
+	}
+
+	function stringValue(value: unknown, fallback = ''): string {
+		return typeof value === 'string' ? value : fallback;
+	}
+
+	function booleanValue(value: unknown, fallback = false): boolean {
+		return typeof value === 'boolean' ? value : fallback;
+	}
+
+	function numberString(value: unknown, fallback: string): string {
+		const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+		return Number.isFinite(parsed) ? String(parsed) : fallback;
+	}
+
+	function errorMessages(value: unknown, fallback: string): string[] {
+		if (!isObject(value)) return [fallback];
+		if (Array.isArray(value.errors)) {
+			const messages = value.errors.filter((error): error is string => typeof error === 'string');
+			if (messages.length > 0) return messages;
+		}
+		return [stringValue(value.error, fallback)];
+	}
+
+	async function readJson(response: Response): Promise<unknown> {
+		try {
+			return await response.json();
+		} catch {
+			return null;
+		}
+	}
+
+	function toRecipient(value: unknown): RecipientView | null {
+		if (!isObject(value)) return null;
+		const id = stringValue(value.id);
+		const destination = stringValue(value.destination);
+		if (!id || value.channel !== 'email' || !destination) return null;
+		return {
+			id,
+			channel: 'email',
+			destination,
+			verified: booleanValue(value.verified),
+			canResend: booleanValue(value.canResend)
+		};
+	}
+
+	function toTestResult(value: unknown, responseOk: boolean) {
+		const payload = isObject(value) ? value : {};
+		const errors = Array.isArray(payload.errors)
+			? payload.errors.filter((error): error is string => typeof error === 'string')
+			: [];
+		if (!responseOk && errors.length === 0) errors.push(stringValue(payload.error, 'Test alert request failed'));
+		return {
+			sent: Number(payload.sent ?? 0) || 0,
+			failed: Number(payload.failed ?? (responseOk ? 0 : 1)) || 0,
+			errors
+		};
+	}
+
 	async function authFetch(path: string, init?: RequestInit): Promise<Response> {
+		if (typeof window.shopify?.idToken !== 'function') {
+			throw new Error('Shopify App Bridge is not ready. Refresh the embedded app and try again.');
+		}
 		const token = await window.shopify.idToken();
 		return fetch(path, {
 			...init,
@@ -68,27 +135,39 @@
 
 	async function loadRecipients() {
 		const response = await authFetch('/api/recipients');
-		if (response.ok) recipients = (await response.json()).recipients;
+		const data = await readJson(response);
+		if (!response.ok) {
+			throw new Error(`Failed to load recipients (${response.status})`);
+		}
+		const rawRecipients = isObject(data) && Array.isArray(data.recipients) ? data.recipients : [];
+		recipients = rawRecipients.map(toRecipient).filter((recipient): recipient is RecipientView => !!recipient);
 	}
 
 	onMount(async () => {
 		try {
 			const [settingsRes] = await Promise.all([authFetch('/api/settings'), loadRecipients()]);
 			if (!settingsRes.ok) throw new Error(`Failed to load settings (${settingsRes.status})`);
-			const data = await settingsRes.json();
+			const data = await readJson(settingsRes);
+			if (!isObject(data) || !isObject(data.rule) || !isObject(data.channels)) {
+				throw new Error('Settings response was incomplete');
+			}
 
-			ruleEnabled = data.rule.enabled;
-			thresholdAmount = String(data.rule.thresholdAmount);
-			minItemCount = data.rule.minItemCount ? String(data.rule.minItemCount) : '';
-			inactivityMinutes = String(data.rule.inactivityMinutes);
-			attributionWindowDays = String(data.attributionWindowDays);
+			ruleEnabled = booleanValue(data.rule.enabled, ruleEnabled);
+			thresholdAmount = numberString(data.rule.thresholdAmount, thresholdAmount);
+			minItemCount =
+				data.rule.minItemCount === null || data.rule.minItemCount === undefined
+					? ''
+					: numberString(data.rule.minItemCount, minItemCount);
+			inactivityMinutes = numberString(data.rule.inactivityMinutes, inactivityMinutes);
+			attributionWindowDays = numberString(data.attributionWindowDays, attributionWindowDays);
 
-			emailEnabled = data.channels.emailEnabled;
-			slackEnabled = data.channels.slackEnabled;
-			slackConnected = data.channels.slackConnected;
-			slackChannelName = data.channels.slackChannelName ?? null;
+			emailEnabled = booleanValue(data.channels.emailEnabled, emailEnabled);
+			slackEnabled = booleanValue(data.channels.slackEnabled, slackEnabled);
+			slackConnected = booleanValue(data.channels.slackConnected, slackConnected);
+			slackChannelName =
+				typeof data.channels.slackChannelName === 'string' ? data.channels.slackChannelName : null;
 
-			currency = data.currency;
+			currency = stringValue(data.currency, currency);
 
 			// Surface the result of a just-completed Slack OAuth round-trip.
 			const slackResult = new URLSearchParams(window.location.search).get('slack');
@@ -118,11 +197,18 @@
 			const response = await authFetch('/api/slack', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ action: 'connect' })
+				body: JSON.stringify({ action: 'connect', returnTo: '/app/settings' })
 			});
-			const data = await response.json();
+			const data = await readJson(response);
 			if (!response.ok) {
-				slackNotice = { tone: 'warning', text: data.error ?? 'Could not start Slack connection.' };
+				slackNotice = {
+					tone: 'warning',
+					text: errorMessages(data, 'Could not start Slack connection.')[0]
+				};
+				return;
+			}
+			if (!isObject(data) || typeof data.url !== 'string') {
+				slackNotice = { tone: 'warning', text: 'Could not start Slack connection.' };
 				return;
 			}
 			// Break out of the Shopify iframe to Slack's consent screen.
@@ -176,7 +262,7 @@
 				})
 			});
 			if (response.status === 422) {
-				saveErrors = (await response.json()).errors;
+				saveErrors = errorMessages(await readJson(response), 'Check the settings and try again.');
 				return false;
 			}
 			if (!response.ok) {
@@ -202,7 +288,7 @@
 			const saved = await save();
 			if (!saved) return;
 			const response = await authFetch('/api/alerts/test', { method: 'POST' });
-			testResult = await response.json();
+			testResult = toTestResult(await readJson(response), response.ok);
 		} catch {
 			testResult = { sent: 0, failed: 0, errors: ['Test alert request failed'] };
 		} finally {
@@ -345,7 +431,7 @@
 						{authFetch}
 						onchange={loadRecipients}
 					/>
-					{#if emailEnabled && emailRecipients.filter((r) => r.verified).length === 0}
+					{#if emailEnabled && confirmedEmailCount === 0}
 						<p class="hint">Add and confirm at least one address to receive email alerts.</p>
 					{/if}
 				</div>

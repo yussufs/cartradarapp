@@ -1,8 +1,8 @@
 /**
- * Shopify Billing: a single flat-rate recurring subscription ($29/month) that
- * the merchant approves once to unlock the Pro plan (unlimited alerts). Shops
- * without an active subscription are on the Free plan, capped at
- * BILLING.freeAlertsPerMonth alerts per calendar month.
+ * Shopify Billing: a flat-rate recurring subscription the merchant approves once
+ * to unlock the Pro plan (unlimited alerts), billed either monthly ($29/mo) or
+ * yearly ($228/yr ≈ $19/mo). Shops without an active subscription are on the Free
+ * plan, capped at BILLING.freeAlertsPerMonth alerts per calendar month.
  */
 import { and, eq, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
@@ -10,7 +10,7 @@ import { getOfflineSession } from '$lib/server/shopify/auth';
 import { createAdmin, throwOnErrors, type AdminClient } from '$lib/server/shopify/graphql';
 import { db } from '$lib/server/db';
 import { checkouts, shops } from '$lib/shared/db/schema';
-import { BILLING, type Plan } from './plans';
+import { BILLING, intervalPricing, type BillingInterval, type Plan } from './plans';
 import { adminAppUrl } from '$lib/server/alerts/format';
 
 async function getOfflineAdmin(shop: string): Promise<AdminClient> {
@@ -29,11 +29,16 @@ function throwOnUserErrors(userErrors: UserError[] | undefined, context: string)
 }
 
 /**
- * Creates the $29/month recurring subscription and returns the confirmation URL
- * the merchant must approve. Activation lands via app_subscriptions/update.
+ * Creates the Pro recurring subscription (monthly $29 or yearly $228) and
+ * returns the confirmation URL the merchant must approve. Activation lands via
+ * app_subscriptions/update.
  */
-export async function activateBilling(shop: string): Promise<string> {
+export async function activateBilling(
+	shop: string,
+	interval: BillingInterval = 'monthly'
+): Promise<string> {
 	const admin = await getOfflineAdmin(shop);
+	const { shopifyInterval, amount } = intervalPricing(interval);
 
 	const response = await admin.graphql<{
 		appSubscriptionCreate: { userErrors: UserError[]; confirmationUrl: string | null };
@@ -60,8 +65,8 @@ export async function activateBilling(shop: string): Promise<string> {
 					{
 						plan: {
 							appRecurringPricingDetails: {
-								price: { amount: BILLING.proPriceUsd.toFixed(2), currencyCode: 'USD' },
-								interval: BILLING.interval
+								price: { amount: amount.toFixed(2), currencyCode: 'USD' },
+								interval: shopifyInterval
 							}
 						}
 					}
@@ -115,7 +120,12 @@ export async function cancelSubscription(shop: string): Promise<Date | null> {
 	const proAccessUntil = periodEnd ? new Date(periodEnd) : null;
 	await db
 		.update(shops)
-		.set({ billingActive: false, billingSubscriptionId: null, proAccessUntil })
+		.set({
+			billingActive: false,
+			billingSubscriptionId: null,
+			billingInterval: null,
+			proAccessUntil
+		})
 		.where(eq(shops.shop, shop));
 	return proAccessUntil;
 }
@@ -157,8 +167,9 @@ export async function recordCancellation(
 	const updates: {
 		billingActive: false;
 		billingSubscriptionId: null;
+		billingInterval: null;
 		proAccessUntil?: Date | null;
-	} = { billingActive: false, billingSubscriptionId: null };
+	} = { billingActive: false, billingSubscriptionId: null, billingInterval: null };
 	if (proAccessUntil !== undefined) updates.proAccessUntil = proAccessUntil;
 	await db.update(shops).set(updates).where(eq(shops.shop, shop));
 }
@@ -176,7 +187,13 @@ export async function syncBillingState(shop: string): Promise<boolean> {
 	const admin = await getOfflineAdmin(shop);
 	const response = await admin.graphql<{
 		currentAppInstallation: {
-			activeSubscriptions: Array<{ id: string; status: string }>;
+			activeSubscriptions: Array<{
+				id: string;
+				status: string;
+				lineItems: Array<{
+					plan: { pricingDetails: { __typename: string; interval?: string | null } };
+				}>;
+			}>;
 		};
 	}>(
 		`#graphql
@@ -185,6 +202,16 @@ export async function syncBillingState(shop: string): Promise<boolean> {
 				activeSubscriptions {
 					id
 					status
+					lineItems {
+						plan {
+							pricingDetails {
+								__typename
+								... on AppRecurringPricing {
+									interval
+								}
+							}
+						}
+					}
 				}
 			}
 		}`
@@ -196,15 +223,26 @@ export async function syncBillingState(shop: string): Promise<boolean> {
 	if (!subscription) {
 		await db
 			.update(shops)
-			.set({ billingActive: false, billingSubscriptionId: null })
+			.set({ billingActive: false, billingSubscriptionId: null, billingInterval: null })
 			.where(eq(shops.shop, shop));
 		return false;
 	}
 
+	const recurring = subscription.lineItems.find(
+		(li) => li.plan.pricingDetails.__typename === 'AppRecurringPricing'
+	);
+	const billingInterval: BillingInterval =
+		recurring?.plan.pricingDetails.interval === 'ANNUAL' ? 'annual' : 'monthly';
+
 	// Active subscription → clear any leftover cancel-grace (they're paying again).
 	await db
 		.update(shops)
-		.set({ billingActive: true, billingSubscriptionId: subscription.id, proAccessUntil: null })
+		.set({
+			billingActive: true,
+			billingSubscriptionId: subscription.id,
+			billingInterval,
+			proAccessUntil: null
+		})
 		.where(eq(shops.shop, shop));
 	return true;
 }
@@ -219,6 +257,8 @@ export interface PlanState {
 	limitReached: boolean;
 	/** True only while a paying subscription is active (not during cancel grace). */
 	subscriptionActive: boolean;
+	/** Billing interval of the active subscription, else null. */
+	interval: BillingInterval | null;
 	/** When cancel-grace Pro ends (Pro until then), else null. */
 	proUntil: Date | null;
 }
@@ -253,6 +293,7 @@ export async function getPlanState(shop: string): Promise<PlanState> {
 			limit: null,
 			limitReached: false,
 			subscriptionActive,
+			interval: subscriptionActive ? (shopRow?.billingInterval ?? null) : null,
 			proUntil: inGrace ? graceEnd : null
 		};
 	}
@@ -264,6 +305,7 @@ export async function getPlanState(shop: string): Promise<PlanState> {
 		limit,
 		limitReached: alertsUsed >= limit,
 		subscriptionActive: false,
+		interval: null,
 		proUntil: null
 	};
 }
