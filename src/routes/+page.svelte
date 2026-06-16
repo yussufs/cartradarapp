@@ -1,17 +1,12 @@
 <svelte:head>
-	<title>Shopify App</title>
-	<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+	<title>Cart Radar</title>
 </svelte:head>
 
 <s-page>
-	<s-section heading="Welcome to your Shopify App">
-		<s-text> This app is designed to run embedded within the Shopify Admin. </s-text>
-		<form method="POST" action="/auth/login">
-			<s-stack gap="base">
-				<s-text-field name="shop" label="Shop domain" details="e.g: my-shop-domain.myshopify.com"
-				></s-text-field>
-				<s-button type="submit">Log in</s-button>
-			</s-stack>
-		</form>
+	<s-section heading="Cart Radar">
+		<s-text>
+			This app runs embedded inside the Shopify admin. Open it from your store's Apps
+			menu in the Shopify admin to get started.
+		</s-text>
 	</s-section>
 </s-page>
